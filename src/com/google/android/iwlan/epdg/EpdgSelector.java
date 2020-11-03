@@ -20,6 +20,7 @@ import android.content.Context;
 import android.net.Network;
 import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
+import android.telephony.CarrierConfigManager;
 import android.telephony.CellIdentityGsm;
 import android.telephony.CellIdentityLte;
 import android.telephony.CellIdentityNr;
@@ -36,7 +37,6 @@ import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
 
-import com.google.android.iwlan.IwlanConfigs;
 import com.google.android.iwlan.IwlanError;
 import com.google.android.iwlan.IwlanHelper;
 
@@ -100,9 +100,11 @@ public class EpdgSelector {
         Log.d(TAG, "onReceive PcoId:" + String.format("0x%04x", pcoId) + " PcoData:" + pcoData);
 
         int PCO_ID_IPV6 =
-                IwlanHelper.getConfig(IwlanConfigs.KEY_EPDG_PCO_ID_IPV6_INT, mContext, mSlotId);
+                IwlanHelper.getConfig(
+                        CarrierConfigManager.Iwlan.KEY_EPDG_PCO_ID_IPV6_INT, mContext, mSlotId);
         int PCO_ID_IPV4 =
-                IwlanHelper.getConfig(IwlanConfigs.KEY_EPDG_PCO_ID_IPV4_INT, mContext, mSlotId);
+                IwlanHelper.getConfig(
+                        CarrierConfigManager.Iwlan.KEY_EPDG_PCO_ID_IPV4_INT, mContext, mSlotId);
 
         Log.d(
                 TAG,
@@ -179,7 +181,7 @@ public class EpdgSelector {
                 new ArrayList<>(
                         Arrays.asList(
                                 IwlanHelper.getConfig(
-                                        IwlanConfigs.KEY_MCC_MNCS_STRING_ARRAY,
+                                        CarrierConfigManager.Iwlan.KEY_MCC_MNCS_STRING_ARRAY,
                                         mContext,
                                         mSlotId)));
         Log.d(TAG, "plmnsFromCarrierConfig:" + plmnsFromCarrierConfig);
@@ -290,10 +292,14 @@ public class EpdgSelector {
         // a delimeter is only used for testing purpose.
         // TODO: need to consider APM on/no cellular condition.
         if (isRoaming && !inSameCountry()) {
-            domainNames = getDomainNames(IwlanConfigs.KEY_EPDG_STATIC_ADDRESS_ROAMING_STRING);
+            domainNames =
+                    getDomainNames(
+                            CarrierConfigManager.Iwlan.KEY_EPDG_STATIC_ADDRESS_ROAMING_STRING);
         }
         if (domainNames == null
-                && (domainNames = getDomainNames(IwlanConfigs.KEY_EPDG_STATIC_ADDRESS_STRING))
+                && (domainNames =
+                                getDomainNames(
+                                        CarrierConfigManager.Iwlan.KEY_EPDG_STATIC_ADDRESS_STRING))
                         == null) {
             Log.d(TAG, "Static address string is null");
             return;
@@ -528,9 +534,11 @@ public class EpdgSelector {
         Log.d(TAG, "PCO Method");
 
         int PCO_ID_IPV6 =
-                IwlanHelper.getConfig(IwlanConfigs.KEY_EPDG_PCO_ID_IPV6_INT, mContext, mSlotId);
+                IwlanHelper.getConfig(
+                        CarrierConfigManager.Iwlan.KEY_EPDG_PCO_ID_IPV6_INT, mContext, mSlotId);
         int PCO_ID_IPV4 =
-                IwlanHelper.getConfig(IwlanConfigs.KEY_EPDG_PCO_ID_IPV4_INT, mContext, mSlotId);
+                IwlanHelper.getConfig(
+                        CarrierConfigManager.Iwlan.KEY_EPDG_PCO_ID_IPV4_INT, mContext, mSlotId);
 
         switch (filter) {
             case PROTO_FILTER_IPV4:
@@ -589,25 +597,25 @@ public class EpdgSelector {
 
                     int[] addrResolutionMethods =
                             IwlanHelper.getConfig(
-                                    IwlanConfigs.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
+                                    CarrierConfigManager.Iwlan.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
                                     mContext,
                                     mSlotId);
 
                     for (int addrResolutionMethod : addrResolutionMethods) {
                         switch (addrResolutionMethod) {
-                            case IwlanConfigs.EPDG_ADDRESS_STATIC:
+                            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_STATIC:
                                 resolutionMethodStatic(filter, validIpList, isRoaming, network);
                                 break;
 
-                            case IwlanConfigs.EPDG_ADDRESS_PLMN:
+                            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_PLMN:
                                 resolutionMethodPlmn(filter, validIpList, isEmergency, network);
                                 break;
 
-                            case IwlanConfigs.EPDG_ADDRESS_PCO:
+                            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_PCO:
                                 resolutionMethodPco(filter, validIpList);
                                 break;
 
-                            case IwlanConfigs.EPDG_ADDRESS_CELLULAR_LOC:
+                            case CarrierConfigManager.Iwlan.EPDG_ADDRESS_CELLULAR_LOC:
                                 resolutionMethodCellularLoc(
                                         filter, validIpList, isEmergency, network);
                                 break;

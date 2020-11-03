@@ -87,13 +87,17 @@ public class IwlanBroadcastReceiverTest {
         lenient()
                 .when(
                         IwlanHelper.getConfig(
-                                eq(IwlanConfigs.KEY_EPDG_PCO_ID_IPV6_INT), any(), eq(testSlotId)))
+                                eq(CarrierConfigManager.Iwlan.KEY_EPDG_PCO_ID_IPV6_INT),
+                                any(),
+                                eq(testSlotId)))
                 .thenReturn(testPcoIdIPv6);
 
         lenient()
                 .when(
                         IwlanHelper.getConfig(
-                                eq(IwlanConfigs.KEY_EPDG_PCO_ID_IPV4_INT), any(), eq(testSlotId)))
+                                eq(CarrierConfigManager.Iwlan.KEY_EPDG_PCO_ID_IPV4_INT),
+                                any(),
+                                eq(testSlotId)))
                 .thenReturn(testPcoIdIPv4);
 
         lenient()

@@ -37,7 +37,6 @@ import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 
-import com.google.android.iwlan.IwlanConfigs;
 import com.google.android.iwlan.IwlanError;
 
 import org.junit.Before;
@@ -131,9 +130,10 @@ public class EpdgSelectorTest {
 
         // Set carrier config mock
         mTestBundle.putIntArray(
-                IwlanConfigs.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
-                new int[] {IwlanConfigs.EPDG_ADDRESS_STATIC});
-        mTestBundle.putString(IwlanConfigs.KEY_EPDG_STATIC_ADDRESS_STRING, testStaticAddress);
+                CarrierConfigManager.Iwlan.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
+                new int[] {CarrierConfigManager.Iwlan.EPDG_ADDRESS_STATIC});
+        mTestBundle.putString(
+                CarrierConfigManager.Iwlan.KEY_EPDG_STATIC_ADDRESS_STRING, testStaticAddress);
 
         ArrayList<InetAddress> testInetAddresses =
                 getValidatedServerListWithDefaultParams(false /*isEmergency*/);
@@ -183,10 +183,10 @@ public class EpdgSelectorTest {
                         : "epdg.epc.mnc120.mcc311.pub.3gppnetwork.org";
 
         mTestBundle.putIntArray(
-                IwlanConfigs.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
-                new int[] {IwlanConfigs.EPDG_ADDRESS_PLMN});
+                CarrierConfigManager.Iwlan.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
+                new int[] {CarrierConfigManager.Iwlan.EPDG_ADDRESS_PLMN});
         mTestBundle.putStringArray(
-                IwlanConfigs.KEY_MCC_MNCS_STRING_ARRAY,
+                CarrierConfigManager.Iwlan.KEY_MCC_MNCS_STRING_ARRAY,
                 new String[] {"310-480", "300-120", "311-120"});
 
         when(mMockNetwork.getAllByName(eq(expectedFqdn1)))
@@ -225,9 +225,10 @@ public class EpdgSelectorTest {
 
         // Set carrier config mock
         mTestBundle.putIntArray(
-                IwlanConfigs.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
-                new int[] {IwlanConfigs.EPDG_ADDRESS_STATIC});
-        mTestBundle.putString(IwlanConfigs.KEY_EPDG_STATIC_ADDRESS_STRING, testStaticAddress);
+                CarrierConfigManager.Iwlan.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
+                new int[] {CarrierConfigManager.Iwlan.EPDG_ADDRESS_STATIC});
+        mTestBundle.putString(
+                CarrierConfigManager.Iwlan.KEY_EPDG_STATIC_ADDRESS_STRING, testStaticAddress);
 
         ArrayList<InetAddress> testInetAddresses =
                 getValidatedServerListWithDefaultParams(false /*isEmergency*/);
@@ -286,8 +287,8 @@ public class EpdgSelectorTest {
     @Test
     public void testPcoResolutionMethod() throws Exception {
         mTestBundle.putIntArray(
-                IwlanConfigs.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
-                new int[] {IwlanConfigs.EPDG_ADDRESS_PCO});
+                CarrierConfigManager.Iwlan.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
+                new int[] {CarrierConfigManager.Iwlan.EPDG_ADDRESS_PCO});
         addTestPcoIdsToTestConfigBundle();
 
         mEpdgSelector.clearPcoData();
@@ -307,8 +308,8 @@ public class EpdgSelectorTest {
     }
 
     private void addTestPcoIdsToTestConfigBundle() {
-        mTestBundle.putInt(IwlanConfigs.KEY_EPDG_PCO_ID_IPV6_INT, testPcoIdIPv6);
-        mTestBundle.putInt(IwlanConfigs.KEY_EPDG_PCO_ID_IPV4_INT, testPcoIdIPv4);
+        mTestBundle.putInt(CarrierConfigManager.Iwlan.KEY_EPDG_PCO_ID_IPV6_INT, testPcoIdIPv6);
+        mTestBundle.putInt(CarrierConfigManager.Iwlan.KEY_EPDG_PCO_ID_IPV4_INT, testPcoIdIPv4);
     }
 
     @Test
@@ -341,8 +342,8 @@ public class EpdgSelectorTest {
         List<CellInfo> fakeCellInfoArray = new ArrayList<CellInfo>();
 
         mTestBundle.putIntArray(
-                IwlanConfigs.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
-                new int[] {IwlanConfigs.EPDG_ADDRESS_CELLULAR_LOC});
+                CarrierConfigManager.Iwlan.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
+                new int[] {CarrierConfigManager.Iwlan.EPDG_ADDRESS_CELLULAR_LOC});
 
         // Set cell info mock
         fakeCellInfoArray.add(mMockCellInfoGsm);

@@ -45,7 +45,6 @@ import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
 
-import com.google.android.iwlan.IwlanConfigs;
 import com.google.android.iwlan.IwlanError;
 
 import org.junit.Before;
@@ -275,10 +274,12 @@ public class EpdgTunnelManagerTest {
         int softTimeChild = 1000;
 
         PersistableBundle bundle = new PersistableBundle();
-        bundle.putInt(IwlanConfigs.KEY_IKE_REKEY_HARD_TIMER_SEC_INT, hardTime);
-        bundle.putInt(IwlanConfigs.KEY_IKE_REKEY_SOFT_TIMER_SEC_INT, softTime);
-        bundle.putInt(IwlanConfigs.KEY_CHILD_SA_REKEY_HARD_TIMER_SEC_INT, hardTimeChild);
-        bundle.putInt(IwlanConfigs.KEY_CHILD_SA_REKEY_SOFT_TIMER_SEC_INT, softTimeChild);
+        bundle.putInt(CarrierConfigManager.Iwlan.KEY_IKE_REKEY_HARD_TIMER_SEC_INT, hardTime);
+        bundle.putInt(CarrierConfigManager.Iwlan.KEY_IKE_REKEY_SOFT_TIMER_SEC_INT, softTime);
+        bundle.putInt(
+                CarrierConfigManager.Iwlan.KEY_CHILD_SA_REKEY_HARD_TIMER_SEC_INT, hardTimeChild);
+        bundle.putInt(
+                CarrierConfigManager.Iwlan.KEY_CHILD_SA_REKEY_SOFT_TIMER_SEC_INT, softTimeChild);
 
         setupMockForGetConfig(bundle);
 
@@ -341,7 +342,8 @@ public class EpdgTunnelManagerTest {
         int[] testTimeouts = {1000, 1200, 1400, 1600, 2000, 4000};
 
         PersistableBundle bundle = new PersistableBundle();
-        bundle.putIntArray(IwlanConfigs.KEY_RETRANSMIT_TIMER_MSEC_INT_ARRAY, testTimeouts);
+        bundle.putIntArray(
+                CarrierConfigManager.Iwlan.KEY_RETRANSMIT_TIMER_MSEC_INT_ARRAY, testTimeouts);
 
         setupMockForGetConfig(bundle);
 
@@ -398,7 +400,7 @@ public class EpdgTunnelManagerTest {
         int testDpdDelay = 600;
 
         PersistableBundle bundle = new PersistableBundle();
-        bundle.putInt(IwlanConfigs.KEY_DPD_TIMER_SEC_INT, testDpdDelay);
+        bundle.putInt(CarrierConfigManager.Iwlan.KEY_DPD_TIMER_SEC_INT, testDpdDelay);
 
         setupMockForGetConfig(bundle);
         when(mMockEpdgSelector.getValidatedServerList(

@@ -157,14 +157,17 @@ public class IwlanHelper {
                 carrierConfigManager.getConfigForSubId(getSubId(context, slotId));
 
         if (bundle == null || bundle.get(key) == null) {
-            bundle = IwlanConfigs.getDefaultConfig();
+            return getDefaultConfig(key);
+        } else {
+            return (T) bundle.get(key);
         }
-
-        return (T) bundle.get(key);
     }
 
     public static <T> T getDefaultConfig(String key) {
-        PersistableBundle bundle = IwlanConfigs.getDefaultConfig();
+        PersistableBundle bundle = CarrierConfigManager.getDefaultConfig();
+        if (bundle == null) {
+            throw new IllegalStateException("Default config is null for: " + key);
+        }
         return (T) bundle.get(key);
     }
 }
