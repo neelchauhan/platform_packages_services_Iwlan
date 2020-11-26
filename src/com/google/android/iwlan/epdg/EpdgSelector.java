@@ -627,12 +627,16 @@ public class EpdgSelector {
                                                 + addrResolutionMethod);
                         }
                     }
-                    if (!validIpList.isEmpty()) {
-                        Collections.sort(validIpList, inetAddressComparator);
-                        selectorCallback.onServerListChanged(removeDuplicateIp(validIpList));
-                    } else {
-                        selectorCallback.onError(
-                                new IwlanError(IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED));
+
+                    if (selectorCallback != null) {
+                        if (!validIpList.isEmpty()) {
+                            Collections.sort(validIpList, inetAddressComparator);
+                            selectorCallback.onServerListChanged(removeDuplicateIp(validIpList));
+                        } else {
+                            selectorCallback.onError(
+                                    new IwlanError(
+                                            IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED));
+                        }
                     }
                 };
         Thread subThread = new Thread(doValidation);

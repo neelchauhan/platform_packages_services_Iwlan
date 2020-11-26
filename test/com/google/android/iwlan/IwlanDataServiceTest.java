@@ -16,12 +16,16 @@
 
 package com.google.android.iwlan;
 
+import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
+import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
+
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
 
 import static org.junit.Assert.*;
 import static org.mockito.Matchers.isNull;
 import static org.mockito.Mockito.*;
 
+import android.content.ContentResolver;
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.LinkAddress;
@@ -29,6 +33,8 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.telephony.AccessNetworkConstants.AccessNetworkType;
 import android.telephony.DataFailCause;
+import android.telephony.SubscriptionInfo;
+import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
 import android.telephony.data.DataCallResponse;
@@ -36,11 +42,14 @@ import android.telephony.data.DataProfile;
 import android.telephony.data.DataService;
 import android.telephony.data.DataServiceCallback;
 import android.telephony.data.IDataServiceCallback;
+import android.telephony.ims.ImsManager;
+import android.telephony.ims.ImsMmTelManager;
 
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider;
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider.IwlanTunnelCallback;
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider.TunnelState;
 import com.google.android.iwlan.IwlanDataService.IwlanNetworkMonitorCallback;
+import com.google.android.iwlan.epdg.EpdgSelector;
 import com.google.android.iwlan.epdg.EpdgTunnelManager;
 import com.google.android.iwlan.epdg.TunnelLinkProperties;
 import com.google.android.iwlan.epdg.TunnelLinkPropertiesTest;
@@ -62,11 +71,9 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
-import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
-
 public class IwlanDataServiceTest {
     private static final int DEFAULT_SLOT_INDEX = 0;
+    private static final int DEFAULT_SUB_INDEX = 0;
     private static final int LINK_MTU = 1280;
     private static final String TEST_APN_NAME = "ims";
     private static final String IP_ADDRESS = "192.0.2.1";
@@ -76,6 +83,9 @@ public class IwlanDataServiceTest {
     private static final String INTERFACE_NAME = "ipsec6";
 
     @Mock private Context mMockContext;
+    @Mock private SubscriptionManager mMockSubscriptionManager;
+    @Mock private SubscriptionInfo mMockSubscriptionInfo;
+    @Mock private ContentResolver mMockContentResolver;
     @Mock private ConnectivityManager mMockConnectivityManager;
     @Mock private DataServiceCallback mMockDataServiceCallback;
     @Mock private EpdgTunnelManager mMockEpdgTunnelManager;
@@ -84,6 +94,10 @@ public class IwlanDataServiceTest {
     @Mock private NetworkCapabilities mMockNetworkCapabilities;
     @Mock private TunnelLinkProperties mMockTunnelLinkProperties;
     @Mock private ErrorPolicyManager mMockErrorPolicyManager;
+    @Mock private ImsManager mMockImsManager;
+    @Mock private ImsMmTelManager mMockImsMmTelManager;
+    @Mock private TelephonyManager mMockTelephonyManager;
+    @Mock private EpdgSelector mMockEpdgSelector;
     MockitoSession mStaticMockSession;
 
     private List<DataCallResponse> mResultDataCallList;
@@ -142,6 +156,7 @@ public class IwlanDataServiceTest {
 
         mStaticMockSession =
                 mockitoSession()
+                        .mockStatic(EpdgSelector.class)
                         .mockStatic(ErrorPolicyManager.class)
                         .mockStatic(IwlanBroadcastReceiver.class)
                         .mockStatic(IwlanHelper.class)
@@ -155,6 +170,33 @@ public class IwlanDataServiceTest {
         when(mMockNetworkCapabilities.hasTransport(eq(TRANSPORT_CELLULAR))).thenReturn(false);
         when(mMockNetworkCapabilities.hasTransport(eq(TRANSPORT_WIFI))).thenReturn(true);
 
+        when(mMockContext.getSystemService(eq(SubscriptionManager.class)))
+                .thenReturn(mMockSubscriptionManager);
+
+        when(mMockSubscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(anyInt()))
+                .thenReturn(mMockSubscriptionInfo);
+
+        when(mMockSubscriptionInfo.getSubscriptionId()).thenReturn(DEFAULT_SUB_INDEX);
+
+        when(mMockContext.getSystemService(eq(TelephonyManager.class)))
+                .thenReturn(mMockTelephonyManager);
+
+        when(mMockTelephonyManager.createForSubscriptionId(eq(DEFAULT_SUB_INDEX)))
+                .thenReturn(mMockTelephonyManager);
+
+        when(mMockTelephonyManager.isNetworkRoaming()).thenReturn(false);
+
+        when(mMockContext.getContentResolver()).thenReturn(mMockContentResolver);
+
+        when(mMockContext.getSystemService(eq(ImsManager.class))).thenReturn(mMockImsManager);
+
+        when(mMockImsManager.getImsMmTelManager(anyInt())).thenReturn(mMockImsMmTelManager);
+
+        when(mMockImsMmTelManager.isVoWiFiSettingEnabled()).thenReturn(false);
+
+        when(EpdgSelector.getSelectorInstance(eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(mMockEpdgSelector);
+
         mIwlanDataService = spy(new IwlanDataService());
         mIwlanDataService.setAppContext(mMockContext);
         mIwlanDataServiceProvider =
@@ -166,6 +208,7 @@ public class IwlanDataServiceTest {
     @After
     public void cleanUp() throws Exception {
         mStaticMockSession.finishMocking();
+        mIwlanDataServiceProvider.close();
         if (mIwlanDataService != null) {
             mIwlanDataService.onDestroy();
         }
@@ -193,6 +236,7 @@ public class IwlanDataServiceTest {
 
         assertFalse(ret);
         verify(mMockIwlanDataServiceProvider).forceCloseTunnelsInDeactivatingState();
+        mIwlanDataService.removeDataServiceProvider(mMockIwlanDataServiceProvider);
     }
 
     @Test
@@ -447,6 +491,47 @@ public class IwlanDataServiceTest {
                 DataCallResponse.HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_HANDOVER);
         assertEquals(dataCallResponse.getCause(), DataFailCause.ERROR_UNSPECIFIED);
         assertEquals(dataCallResponse.getRetryDurationMillis(), -1L);
+    }
+
+    @Test
+    public void testCarrierConfigEventReceived() throws Exception {
+        /* Wifi is connected */
+        mIwlanDataService.setNetworkConnected(true, mMockNetwork, IwlanDataService.Transport.WIFI);
+
+        mIwlanDataServiceProvider
+                .mHandler
+                .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
+                .sendToTarget();
+        sleep(1000);
+
+        mIwlanDataServiceProvider
+                .mHandler
+                .obtainMessage(IwlanEventListener.WIFI_CALLING_ENABLE_EVENT)
+                .sendToTarget();
+        sleep(1000);
+
+        verify(mMockEpdgSelector, times(1))
+                .getValidatedServerList(
+                        eq(EpdgSelector.PROTO_FILTER_IPV4V6),
+                        eq(false),
+                        eq(false),
+                        eq(mMockNetwork),
+                        isNull());
+        verify(mMockEpdgSelector, times(1))
+                .getValidatedServerList(
+                        eq(EpdgSelector.PROTO_FILTER_IPV4V6),
+                        eq(false),
+                        eq(true),
+                        eq(mMockNetwork),
+                        isNull());
+    }
+
+    private void sleep(long time) {
+        try {
+            Thread.sleep(time);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private DataProfile buildDataProfile() {

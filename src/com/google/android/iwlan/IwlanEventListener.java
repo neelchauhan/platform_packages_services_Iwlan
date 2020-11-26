@@ -18,9 +18,9 @@ package com.google.android.iwlan;
 
 import android.content.Context;
 import android.content.Intent;
-import android.net.wifi.WifiInfo;
 import android.database.ContentObserver;
 import android.net.Uri;
+import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -30,8 +30,12 @@ import android.support.annotation.NonNull;
 import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
+import android.telephony.ims.ImsManager;
+import android.telephony.ims.ImsMmTelManager;
 import android.util.Log;
 import android.util.SparseArray;
+
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.HashSet;
 import java.util.List;
@@ -57,14 +61,23 @@ public class IwlanEventListener {
     /** Wifi AccessPoint changed. */
     public static final int WIFI_AP_CHANGED_EVENT = 5;
 
+    /** Wifi calling turned on or enabled */
+    public static final int WIFI_CALLING_ENABLE_EVENT = 6;
+
     /** Wifi calling turned off or disabled */
-    public static final int WIFI_CALLING_DISABLE_EVENT = 6;
+    public static final int WIFI_CALLING_DISABLE_EVENT = 7;
 
     /** Cross sim calling enabled */
-    public static final int CROSS_SIM_CALLING_ENABLE_EVENT = 7;
+    public static final int CROSS_SIM_CALLING_ENABLE_EVENT = 8;
 
     /** Cross sim calling disabled */
-    public static final int CROSS_SIM_CALLING_DISABLE_EVENT = 8;
+    public static final int CROSS_SIM_CALLING_DISABLE_EVENT = 9;
+
+    /**
+     * On receiving {@link CarrierConfigManager#ACTION_CARRIER_CONFIG_CHANGED} intent with
+     * UNKNOWN_CARRIER_ID.
+     */
+    public static final int CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT = 10;
 
     @IntDef({
         CARRIER_CONFIG_CHANGED_EVENT,
@@ -72,9 +85,11 @@ public class IwlanEventListener {
         APM_DISABLE_EVENT,
         APM_ENABLE_EVENT,
         WIFI_AP_CHANGED_EVENT,
+        WIFI_CALLING_ENABLE_EVENT,
         WIFI_CALLING_DISABLE_EVENT,
         CROSS_SIM_CALLING_ENABLE_EVENT,
-        CROSS_SIM_CALLING_DISABLE_EVENT
+        CROSS_SIM_CALLING_DISABLE_EVENT,
+        CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT
     })
     @interface IwlanEventType {};
 
@@ -91,6 +106,7 @@ public class IwlanEventListener {
     private Context mContext;
     private int mSlotId;
     private Uri mCrossSimCallingUri;
+    private Uri mWfcEnabledUri;
     private UserSettingContentObserver mUserSettingContentObserver;
     private HandlerThread mUserSettingHandlerThread;
 
@@ -104,7 +120,9 @@ public class IwlanEventListener {
         @Override
         public void onChange(boolean selfChange, Uri uri) {
             if (mCrossSimCallingUri.equals(uri)) {
-                getCurrentCrossSimCallingSetting(uri);
+                getCurrentUriSetting(uri);
+            } else if (mWfcEnabledUri.equals(uri)) {
+                getCurrentUriSetting(uri);
             }
         }
     }
@@ -193,12 +211,13 @@ public class IwlanEventListener {
 
                 Context context = IwlanDataService.getContext();
                 if (slotId != SubscriptionManager.INVALID_SIM_SLOT_INDEX && context != null) {
-                    event = CARRIER_CONFIG_CHANGED_EVENT;
-                    getInstance(context, slotId).updateHandlers(event);
-
                     if (carrierId != TelephonyManager.UNKNOWN_CARRIER_ID) {
+                        event = CARRIER_CONFIG_CHANGED_EVENT;
                         getInstance(context, slotId).registerContentObserver();
+                    } else {
+                        event = CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT;
                     }
+                    getInstance(context, slotId).updateHandlers(event);
                 }
                 break;
             case Intent.ACTION_AIRPLANE_MODE_CHANGED:
@@ -290,6 +309,9 @@ public class IwlanEventListener {
             case "WIFI_AP_CHANGED_EVENT":
                 ret = WIFI_AP_CHANGED_EVENT;
                 break;
+            case "WIFI_CALLING_ENABLE_EVENT":
+                ret = WIFI_CALLING_ENABLE_EVENT;
+                break;
             case "WIFI_CALLING_DISABLE_EVENT":
                 ret = WIFI_CALLING_DISABLE_EVENT;
                 break;
@@ -298,6 +320,9 @@ public class IwlanEventListener {
                 break;
             case "CROSS_SIM_CALLING_DISABLE_EVENT":
                 ret = CROSS_SIM_CALLING_DISABLE_EVENT;
+                break;
+            case "CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT":
+                ret = CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT;
                 break;
         }
         return ret;
@@ -320,6 +345,7 @@ public class IwlanEventListener {
             Handler mhandler = new Handler(mlooper);
             mUserSettingContentObserver = new UserSettingContentObserver(mhandler);
 
+            // Register for CrossSimCalling setting uri
             mCrossSimCallingUri =
                     Uri.withAppendedPath(
                             SubscriptionManager.CROSS_SIM_ENABLED_CONTENT_URI,
@@ -327,25 +353,67 @@ public class IwlanEventListener {
             mContext.getContentResolver()
                     .registerContentObserver(
                             mCrossSimCallingUri, true, mUserSettingContentObserver);
+
+            // Register for WifiCalling setting uri
+            mWfcEnabledUri =
+                    Uri.withAppendedPath(
+                            SubscriptionManager.WFC_ENABLED_CONTENT_URI,
+                            String.valueOf(IwlanHelper.getSubId(mContext, mSlotId)));
+            mContext.getContentResolver()
+                    .registerContentObserver(mWfcEnabledUri, true, mUserSettingContentObserver);
         }
         // Update current Cross Sim Calling setting
-        getCurrentCrossSimCallingSetting(mCrossSimCallingUri);
+        getCurrentUriSetting(mCrossSimCallingUri);
+
+        // Update current Wifi Calling setting
+        getCurrentUriSetting(mWfcEnabledUri);
     }
 
-    public void getCurrentCrossSimCallingSetting(Uri uri) {
+    @VisibleForTesting
+    void getCurrentUriSetting(Uri uri) {
         String uriString = uri.getPath();
         int subIndex = Integer.parseInt(uriString.substring(uriString.lastIndexOf('/') + 1));
         int slotIndex = SubscriptionManager.getSlotIndex(subIndex);
 
         if (slotIndex == SubscriptionManager.INVALID_SIM_SLOT_INDEX) {
-            Log.e(LOG_TAG, "Invalid slot index: " + slotIndex);
+            Log.e(SUB_TAG, "Invalid slot index: " + slotIndex);
             return;
         }
 
-        boolean isCstEnabled = IwlanHelper.isCrossSimCallingEnabled(mContext, slotIndex);
-        int event =
-                (isCstEnabled) ? CROSS_SIM_CALLING_ENABLE_EVENT : CROSS_SIM_CALLING_DISABLE_EVENT;
-        getInstance(mContext, slotIndex).updateHandlers(event);
+        if (uri.equals(mCrossSimCallingUri)) {
+            boolean isCstEnabled = IwlanHelper.isCrossSimCallingEnabled(mContext, slotIndex);
+            int event =
+                    (isCstEnabled)
+                            ? CROSS_SIM_CALLING_ENABLE_EVENT
+                            : CROSS_SIM_CALLING_DISABLE_EVENT;
+            getInstance(mContext, slotIndex).updateHandlers(event);
+        } else if (uri.equals(mWfcEnabledUri)) {
+            ImsManager imsManager = mContext.getSystemService(ImsManager.class);
+            if (imsManager == null) {
+                Log.e(SUB_TAG, "Could not find  ImsManager");
+                return;
+            }
+            ImsMmTelManager imsMmTelManager = imsManager.getImsMmTelManager(subIndex);
+            if (imsMmTelManager == null) {
+                Log.e(SUB_TAG, "Could not find  ImsMmTelManager");
+                return;
+            }
+            boolean wfcEnabled = imsMmTelManager.isVoWiFiSettingEnabled();
+            int event = (wfcEnabled) ? WIFI_CALLING_ENABLE_EVENT : WIFI_CALLING_DISABLE_EVENT;
+            getInstance(mContext, slotIndex).updateHandlers(event);
+        } else {
+            Log.e(SUB_TAG, "Unknown Uri : " + uri);
+        }
+    }
+
+    @VisibleForTesting
+    void setCrossSimCallingUri(Uri uri) {
+        mCrossSimCallingUri = uri;
+    }
+
+    @VisibleForTesting
+    void setWfcEnabledUri(Uri uri) {
+        mWfcEnabledUri = uri;
     }
 
     private synchronized void updateHandlers(int event) {

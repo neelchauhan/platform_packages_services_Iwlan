@@ -16,6 +16,9 @@
 
 package com.google.android.iwlan;
 
+import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
+import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
+
 import android.content.Context;
 import android.content.Intent;
 import android.net.ConnectivityManager;
@@ -27,12 +30,14 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.Message;
 import android.support.annotation.GuardedBy;
 import android.support.annotation.IntRange;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.telephony.AccessNetworkConstants.AccessNetworkType;
 import android.telephony.DataFailCause;
+import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
 import android.telephony.data.DataCallResponse;
 import android.telephony.data.DataProfile;
@@ -43,6 +48,7 @@ import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
 
+import com.google.android.iwlan.epdg.EpdgSelector;
 import com.google.android.iwlan.epdg.EpdgTunnelManager;
 import com.google.android.iwlan.epdg.TunnelLinkProperties;
 import com.google.android.iwlan.epdg.TunnelSetupRequest;
@@ -55,9 +61,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-
-import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
-import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
 
 public class IwlanDataService extends DataService {
 
@@ -166,6 +169,11 @@ public class IwlanDataService extends DataService {
         private final String SUB_TAG;
         private final IwlanDataService mIwlanDataService;
         private final IwlanTunnelCallback mIwlanTunnelCallback;
+        private HandlerThread mHandlerThread;
+        @VisibleForTesting Handler mHandler;
+        private boolean mWfcEnabled = false;
+        private boolean mCarrierConfigReady = false;
+        private EpdgSelector mEpdgSelector;
 
         // apn to TunnelState
         // Lock this at public entry and exit points if:
@@ -344,6 +352,51 @@ public class IwlanDataService extends DataService {
             }
         }
 
+        private final class DSPHandler extends Handler {
+            private final String TAG =
+                    IwlanDataService.class.getSimpleName()
+                            + DSPHandler.class.getSimpleName()
+                            + getSlotIndex();
+
+            @Override
+            public void handleMessage(Message msg) {
+                Log.d(TAG, "msg.what = " + msg.what);
+                switch (msg.what) {
+                    case IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT:
+                        Log.d(TAG, "On CARRIER_CONFIG_CHANGED_EVENT");
+                        mCarrierConfigReady = true;
+                        dnsPrefetchCheck();
+                        break;
+                    case IwlanEventListener.CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT:
+                        Log.d(TAG, "On CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT");
+                        mCarrierConfigReady = false;
+                        break;
+                    case IwlanEventListener.WIFI_CALLING_ENABLE_EVENT:
+                        Log.d(TAG, "On WIFI_CALLING_ENABLE_EVENT");
+                        mWfcEnabled = true;
+                        dnsPrefetchCheck();
+                        break;
+                    case IwlanEventListener.WIFI_CALLING_DISABLE_EVENT:
+                        Log.d(TAG, "On WIFI_CALLING_DISABLE_EVENT");
+                        mWfcEnabled = false;
+                        break;
+                    default:
+                        Log.d(TAG, "Unknown message received!");
+                        break;
+                }
+            }
+
+            DSPHandler(Looper looper) {
+                super(looper);
+            }
+        }
+
+        Looper getLooper() {
+            mHandlerThread = new HandlerThread("DSPHandlerThread");
+            mHandlerThread.start();
+            return mHandlerThread.getLooper();
+        }
+
         /**
          * Constructor
          *
@@ -358,6 +411,20 @@ public class IwlanDataService extends DataService {
             // get reference to resolver
             mIwlanDataService = iwlanDataService;
             mIwlanTunnelCallback = new IwlanTunnelCallback(this);
+            mEpdgSelector = EpdgSelector.getSelectorInstance(mContext, slotIndex);
+
+            // Register IwlanEventListener
+            initHandler();
+            List<Integer> events = new ArrayList<Integer>();
+            events.add(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT);
+            events.add(IwlanEventListener.CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT);
+            events.add(IwlanEventListener.WIFI_CALLING_ENABLE_EVENT);
+            events.add(IwlanEventListener.WIFI_CALLING_DISABLE_EVENT);
+            IwlanEventListener.getInstance(mContext, slotIndex).addEventListener(events, mHandler);
+        }
+
+        void initHandler() {
+            mHandler = new DSPHandler(getLooper());
         }
 
         @VisibleForTesting
@@ -694,6 +761,49 @@ public class IwlanDataService extends DataService {
             return mIwlanTunnelCallback;
         }
 
+        private void dnsPrefetchCheck() {
+            boolean networkConnected =
+                    mIwlanDataService.isNetworkConnected(
+                            IwlanHelper.isDefaultDataSlot(mContext, getSlotIndex()),
+                            IwlanHelper.isCrossSimCallingEnabled(mContext, getSlotIndex()));
+            /* Check if we need to do prefecting */
+            synchronized (mTunnelStateForApn) {
+                if (networkConnected == true
+                        && mCarrierConfigReady == true
+                        && mWfcEnabled == true
+                        && mTunnelStateForApn.isEmpty()) {
+                    Log.d(TAG, "Trigger DNS prefetching");
+
+                    // Get roaming status
+                    TelephonyManager telephonyManager =
+                            mContext.getSystemService(TelephonyManager.class);
+                    telephonyManager =
+                            telephonyManager.createForSubscriptionId(
+                                    IwlanHelper.getSubId(mContext, getSlotIndex()));
+                    boolean isRoaming = telephonyManager.isNetworkRoaming();
+                    Log.d(TAG, "is Roaming " + isRoaming);
+
+                    prefetchEpdgServerList(mIwlanDataService.sNetwork, isRoaming);
+                } else {
+                    Log.d(
+                            TAG,
+                            "Network connected:"
+                                    + networkConnected
+                                    + " CarrierConfigReady:"
+                                    + mCarrierConfigReady
+                                    + " WfcEnabled:"
+                                    + mWfcEnabled);
+                }
+            }
+        }
+
+        private void prefetchEpdgServerList(Network network, boolean isRoaming) {
+            mEpdgSelector.getValidatedServerList(
+                    EpdgSelector.PROTO_FILTER_IPV4V6, isRoaming, false, network, null);
+            mEpdgSelector.getValidatedServerList(
+                    EpdgSelector.PROTO_FILTER_IPV4V6, isRoaming, true, network, null);
+        }
+
         /**
          * Called when the instance of data service is destroyed (e.g. got unbind or binder died) or
          * when the data service provider is removed.
@@ -702,6 +812,8 @@ public class IwlanDataService extends DataService {
         public void close() {
             // TODO: call epdgtunnelmanager.releaseInstance or equivalent
             mIwlanDataService.removeDataServiceProvider(this);
+            IwlanEventListener.getInstance(mContext, getSlotIndex()).removeEventListener(mHandler);
+            mHandlerThread.quit();
         }
     }
 
@@ -755,6 +867,9 @@ public class IwlanDataService extends DataService {
         } else {
             if (transport == Transport.WIFI) {
                 IwlanEventListener.onWifiConnected(mContext);
+            }
+            for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
+                dp.dnsPrefetchCheck();
             }
         }
     }
