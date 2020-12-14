@@ -35,7 +35,6 @@ import android.telephony.data.DataProfile;
 import android.telephony.data.DataService;
 import android.telephony.data.DataServiceCallback;
 import android.telephony.data.IDataServiceCallback;
-import android.telephony.data.SliceInfo;
 
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider;
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider.IwlanTunnelCallback;
@@ -139,13 +138,14 @@ public class IwlanDataServiceTest {
         mStaticMockSession =
                 mockitoSession()
                         .mockStatic(ErrorPolicyManager.class)
+                        .mockStatic(IwlanBroadcastReceiver.class)
                         .strictness(Strictness.LENIENT)
                         .startMocking();
 
         when(mMockContext.getSystemService(eq(ConnectivityManager.class)))
                 .thenReturn(mMockConnectivityManager);
 
-        mIwlanDataService = new IwlanDataService();
+        mIwlanDataService = spy(new IwlanDataService());
         mIwlanDataService.setAppContext(mMockContext);
         mIwlanDataServiceProvider =
                 (IwlanDataServiceProvider)

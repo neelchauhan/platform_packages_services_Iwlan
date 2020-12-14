@@ -197,33 +197,59 @@ public class ErrorPolicyManager {
             mLastErrorForApn.remove(apn);
             return retryTime;
         }
-
+        // remove the entry with the same error if it has back off time
+        if (mLastErrorForApn.containsKey(apn)
+                && mLastErrorForApn.get(apn).getError().equals(iwlanError)
+                && mLastErrorForApn.get(apn).isBackOffTimeValid()) {
+            mLastErrorForApn.remove(apn);
+        }
         if (!mLastErrorForApn.containsKey(apn)
                 || !mLastErrorForApn.get(apn).getError().equals(iwlanError)) {
             Log.d(LOG_TAG, "Doesn't match to the previous error" + iwlanError.toString());
-            ErrorPolicy policy = null;
-
-            if (mCarrierConfigPolicies.containsKey(apn)) {
-                policy = getPreferredErrorPolicy(mCarrierConfigPolicies.get(apn), iwlanError);
-            }
-            if (policy == null && mCarrierConfigPolicies.containsKey("*")) {
-                policy = getPreferredErrorPolicy(mCarrierConfigPolicies.get("*"), iwlanError);
-            }
-            if (policy == null && mDefaultPolicies.containsKey(apn)) {
-                policy = getPreferredErrorPolicy(mDefaultPolicies.get(apn), iwlanError);
-            }
-            if (policy == null && mDefaultPolicies.containsKey("*")) {
-                policy = getPreferredErrorPolicy(mDefaultPolicies.get("*"), iwlanError);
-            } else if (policy == null) {
-                // there should at least be one default policy defined in Default config
-                // that will apply to all errors.
-                logErrorPolicies();
-                throw new AssertionError("no Default policy defined in the config");
-            }
+            ErrorPolicy policy = findErrorPolicy(apn, iwlanError);
             ErrorInfo errorInfo = new ErrorInfo(iwlanError, policy);
             mLastErrorForApn.put(apn, errorInfo);
         }
         retryTime = mLastErrorForApn.get(apn).updateCurrentRetryTime();
+        return retryTime;
+    }
+
+    /**
+     * Updates the last error details with back off time. Return value is -1, which should be
+     * ignored, when the error is IwlanError.NO_ERROR.
+     *
+     * @param apn apn name for which the error happened
+     * @param iwlanError Error
+     * @param long backOffTime in seconds
+     * @return retry time which is the backoff time. -1 if it is NO_ERROR
+     */
+    public synchronized long reportIwlanError(String apn, IwlanError iwlanError, long backOffTime) {
+        // Fail by default
+        long retryTime = -1;
+
+        if (iwlanError.getErrorType() == IwlanError.NO_ERROR) {
+            Log.d(LOG_TAG, "reportIwlanError: NO_ERROR");
+            mLastErrorForApn.remove(apn);
+            return retryTime;
+        }
+
+        // remove the entry with the same error if it doesn't have back off time.
+        if (mLastErrorForApn.containsKey(apn)
+                && mLastErrorForApn.get(apn).getError().equals(iwlanError)
+                && !mLastErrorForApn.get(apn).isBackOffTimeValid()) {
+            mLastErrorForApn.remove(apn);
+        }
+        retryTime = backOffTime;
+        if (!mLastErrorForApn.containsKey(apn)
+                || !mLastErrorForApn.get(apn).getError().equals(iwlanError)) {
+            Log.d(LOG_TAG, "Doesn't match to the previous error" + iwlanError.toString());
+            ErrorPolicy policy = findErrorPolicy(apn, iwlanError);
+            ErrorInfo errorInfo = new ErrorInfo(iwlanError, policy, backOffTime);
+            mLastErrorForApn.put(apn, errorInfo);
+        } else {
+            ErrorInfo info = mLastErrorForApn.get(apn);
+            info.setBackOffTime(backOffTime);
+        }
         return retryTime;
     }
 
@@ -387,6 +413,29 @@ public class ErrorPolicyManager {
 
         readFromCarrierConfig();
         updateUnthrottlingEvents();
+    }
+
+    private ErrorPolicy findErrorPolicy(String apn, IwlanError iwlanError) {
+        ErrorPolicy policy = null;
+
+        if (mCarrierConfigPolicies.containsKey(apn)) {
+            policy = getPreferredErrorPolicy(mCarrierConfigPolicies.get(apn), iwlanError);
+        }
+        if (policy == null && mCarrierConfigPolicies.containsKey("*")) {
+            policy = getPreferredErrorPolicy(mCarrierConfigPolicies.get("*"), iwlanError);
+        }
+        if (policy == null && mDefaultPolicies.containsKey(apn)) {
+            policy = getPreferredErrorPolicy(mDefaultPolicies.get(apn), iwlanError);
+        }
+        if (policy == null && mDefaultPolicies.containsKey("*")) {
+            policy = getPreferredErrorPolicy(mDefaultPolicies.get("*"), iwlanError);
+        } else if (policy == null) {
+            // there should at least be one default policy defined in Default config
+            // that will apply to all errors.
+            logErrorPolicies();
+            throw new AssertionError("no Default policy defined in the config");
+        }
+        return policy;
     }
 
     private ErrorPolicy getPreferredErrorPolicy(
@@ -788,11 +837,22 @@ public class ErrorPolicyManager {
         ErrorPolicy mErrorPolicy;
         int mCurrentRetryIndex;
         long mLastErrorTime;
+        boolean mIsBackOffTimeValid = false;
+        long mBackOffTime;
 
         ErrorInfo(IwlanError error, ErrorPolicy errorPolicy) {
             mError = error;
             mErrorPolicy = errorPolicy;
             mCurrentRetryIndex = -1;
+            mLastErrorTime = new Date().getTime();
+        }
+
+        ErrorInfo(IwlanError error, ErrorPolicy errorPolicy, long backOffTime) {
+            mError = error;
+            mErrorPolicy = errorPolicy;
+            mCurrentRetryIndex = -1;
+            mIsBackOffTimeValid = true;
+            mBackOffTime = backOffTime;
             mLastErrorTime = new Date().getTime();
         }
 
@@ -815,6 +875,9 @@ public class ErrorPolicyManager {
          * of bounds.
          */
         long getCurrentRetryTime() {
+            if (mIsBackOffTimeValid) {
+                return mBackOffTime;
+            }
             if (mErrorPolicy == null) {
                 return -1;
             }
@@ -825,11 +888,23 @@ public class ErrorPolicyManager {
             return time;
         }
 
+        boolean isBackOffTimeValid() {
+            return mIsBackOffTimeValid;
+        }
+
+        void setBackOffTime(long backOffTime) {
+            mBackOffTime = backOffTime;
+        }
+
         boolean canBringUpTunnel() {
             long currentTime = new Date().getTime();
             long timeDifference = TimeUnit.MILLISECONDS.toSeconds(currentTime - mLastErrorTime);
+            long retryTime =
+                    mIsBackOffTimeValid
+                            ? mBackOffTime
+                            : mErrorPolicy.getRetryTime(mCurrentRetryIndex);
             boolean ret = true;
-            if (timeDifference < mErrorPolicy.getRetryTime(mCurrentRetryIndex)) {
+            if (timeDifference < retryTime) {
                 ret = false;
             }
             return ret;

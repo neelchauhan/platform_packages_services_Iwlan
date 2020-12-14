@@ -32,7 +32,6 @@ import com.google.android.iwlan.epdg.EpdgSelector;
 public class IwlanBroadcastReceiver extends BroadcastReceiver {
     private static final String TAG = "IwlanBroadcastReceiver";
 
-    private static Context mContext;
     private static boolean mIsReceiverRegistered = false;
     private static IwlanBroadcastReceiver mInstance;
 
@@ -41,19 +40,18 @@ public class IwlanBroadcastReceiver extends BroadcastReceiver {
             Log.d(TAG, "startListening: Receiver already registered");
             return;
         }
-        mContext = context;
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
-        mContext.registerReceiver(getInstance(), intentFilter);
+        context.registerReceiver(getInstance(), intentFilter);
         mIsReceiverRegistered = true;
     }
 
-    public static void stopListening() {
+    public static void stopListening(Context context) {
         if (!mIsReceiverRegistered) {
             Log.d(TAG, "stopListening: Receiver not registered!");
             return;
         }
-        mContext.unregisterReceiver(getInstance());
+        context.unregisterReceiver(getInstance());
         mIsReceiverRegistered = false;
     }
 
@@ -63,6 +61,7 @@ public class IwlanBroadcastReceiver extends BroadcastReceiver {
         }
         return mInstance;
     }
+
     @Override
     public void onReceive(Context context, Intent intent) {
         String action = intent.getAction();

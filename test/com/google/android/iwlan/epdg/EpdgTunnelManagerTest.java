@@ -36,7 +36,11 @@ import android.net.ipsec.ike.IkeSession;
 import android.net.ipsec.ike.IkeSessionCallback;
 import android.net.ipsec.ike.IkeSessionParams;
 import android.net.ipsec.ike.exceptions.IkeException;
+import android.net.ipsec.ike.exceptions.IkeInternalException;
 import android.net.ipsec.ike.exceptions.InvalidIkeSpiException;
+import android.net.ipsec.ike.ike3gpp.Ike3gppBackoffTimer;
+import android.net.ipsec.ike.ike3gpp.Ike3gppExtension;
+import android.net.ipsec.ike.ike3gpp.Ike3gppInfo;
 import android.os.Looper;
 import android.os.PersistableBundle;
 import android.telephony.CarrierConfigManager;
@@ -46,6 +50,7 @@ import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
 
 import com.google.android.iwlan.IwlanError;
+import com.google.android.iwlan.IwlanHelper;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -58,6 +63,7 @@ import org.mockito.internal.util.reflection.FieldSetter;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
@@ -69,8 +75,6 @@ public class EpdgTunnelManagerTest {
     public static final int DEFAULT_SUBID = 0;
 
     private final String TEST_IP_ADDRESS = "127.0.0.1";
-    private final String TEST_IP_ADDRESS2 = "8.8.8.8";
-    private final String TEST_IP_ADDRESS3 = "1.1.1.1";
     private final String TEST_APN_NAME = "www.xyz.com";
     private EpdgTunnelManager mEpdgTunnelManager;
 
@@ -449,9 +453,11 @@ public class EpdgTunnelManagerTest {
     }
 
     @Test
-    public void testTunnelRetryAfterSetupFails() throws Exception {
+    public void testRetryAfterTunnelSetupFails() throws Exception {
         String testApnName = "www.xyz.com";
+        IwlanError error = new IwlanError(new IkeInternalException(new IOException()));
 
+        doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(testApnName), eq(error));
         setupMockForGetConfig(null);
         when(mMockEpdgSelector.getValidatedServerList(
                         anyInt(),
@@ -480,11 +486,86 @@ public class EpdgTunnelManagerTest {
         assertTrue(ret);
 
         ArrayList<InetAddress> ipList = new ArrayList<>();
-        ipList.add(InetAddress.getByName(TEST_IP_ADDRESS2));
-        ipList.add(InetAddress.getByName(TEST_IP_ADDRESS3));
+        ipList.add(InetAddress.getByName("1.1.1.1"));
+        ipList.add(InetAddress.getByName("8.8.8.8"));
+        ipList.add(InetAddress.getByName("3.3.3.3"));
         mEpdgTunnelManager.sendSelectionRequestComplete(
                 ipList, new IwlanError(IwlanError.NO_ERROR));
+        EpdgTunnelManager.TmIkeSessionCallback ikeSessionCallback;
+        for (InetAddress ip : ipList) {
+            ikeSessionCallback = verifyCreateIkeSession(ip);
+            // Call onclosed with IOException - which should trigger bringup tunnel for the next
+            // address
+            ikeSessionCallback.onClosedExceptionally(new IkeInternalException(new IOException()));
+            Thread.sleep(500);
+        }
 
+        // verify that tunnel callback and reportIwlanError are called after the ip List is
+        // exhausted
+        verify(mEpdgTunnelManager, times(1)).reportIwlanError(eq(testApnName), eq(error));
+        verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(testApnName), eq(error));
+    }
+
+    @Test
+    public void testRetryExhaustionAfterTunnelSetupFails() throws Exception {
+        String testApnName = "www.xyz.com";
+        final int MAX_RETRIES = 2;
+        IwlanError error = new IwlanError(new IkeInternalException(new IOException()));
+
+        doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(testApnName), eq(error));
+
+        PersistableBundle bundle = new PersistableBundle();
+        bundle.putInt(IwlanHelper.CONFIG_KEY_MAX_IMMEDIATE_TUNNEL_SETUP_RETRIES, MAX_RETRIES);
+        setupMockForGetConfig(bundle);
+        when(mMockEpdgSelector.getValidatedServerList(
+                        anyInt(),
+                        eq(false),
+                        eq(false),
+                        eq(mMockNetwork),
+                        any(EpdgSelector.EpdgSelectorCallback.class)))
+                .thenReturn(new IwlanError(IwlanError.NO_ERROR));
+
+        doReturn(null)
+                .doReturn(null)
+                .when(mMockIkeSessionCreator)
+                .createIkeSession(
+                        eq(mMockContext),
+                        any(IkeSessionParams.class),
+                        any(ChildSessionParams.class),
+                        any(Executor.class),
+                        any(IkeSessionCallback.class),
+                        any(ChildSessionCallback.class));
+        doReturn(true).when(mEpdgTunnelManager).canBringUpTunnel(eq(testApnName));
+
+        boolean ret =
+                mEpdgTunnelManager.bringUpTunnel(
+                        getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
+                        mMockIwlanTunnelCallback);
+        assertTrue(ret);
+
+        ArrayList<InetAddress> ipList = new ArrayList<>();
+        ipList.add(InetAddress.getByName("1.1.1.1"));
+        ipList.add(InetAddress.getByName("8.8.8.8"));
+        ipList.add(InetAddress.getByName("3.3.3.3"));
+        ipList.add(InetAddress.getByName("4.4.4.4"));
+        ipList.add(InetAddress.getByName("5.5.5.5"));
+        mEpdgTunnelManager.sendSelectionRequestComplete(
+                ipList, new IwlanError(IwlanError.NO_ERROR));
+        EpdgTunnelManager.TmIkeSessionCallback ikeSessionCallback;
+
+        for (int i = 0; i <= MAX_RETRIES; i++) {
+            ikeSessionCallback = verifyCreateIkeSession(ipList.get(i));
+            // last report of this onClosedExceptionally should trigger tunnel closed callback
+            ikeSessionCallback.onClosedExceptionally(new IkeInternalException(new IOException()));
+            Thread.sleep(500);
+        }
+        // Verify onclosed being called without exhausting the ipList.
+        verify(mEpdgTunnelManager, times(1)).reportIwlanError(eq(testApnName), eq(error));
+        verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(testApnName), eq(error));
+    }
+
+    private EpdgTunnelManager.TmIkeSessionCallback verifyCreateIkeSession(InetAddress ip)
+            throws Exception {
         ArgumentCaptor<IkeSessionParams> ikeSessionParamsCaptor =
                 ArgumentCaptor.forClass(IkeSessionParams.class);
         ArgumentCaptor<EpdgTunnelManager.TmIkeSessionCallback> ikeSessionCallbackCaptor =
@@ -497,17 +578,87 @@ public class EpdgTunnelManagerTest {
                         any(Executor.class),
                         ikeSessionCallbackCaptor.capture(),
                         any(ChildSessionCallback.class));
-
         IkeSessionParams ikeSessionParams = ikeSessionParamsCaptor.getValue();
-        assertEquals(ikeSessionParams.getServerHostname(), TEST_IP_ADDRESS2);
+        assertEquals(ikeSessionParams.getServerHostname(), ip.getHostName());
+        return ikeSessionCallbackCaptor.getValue();
+    }
 
-        // Call onclosed - which should trigger bringup tunnel for the next address
-        EpdgTunnelManager.TmIkeSessionCallback ikeSessionCallback =
-                ikeSessionCallbackCaptor.getValue();
-        ikeSessionCallback.onClosed();
+    @Test
+    public void testBackOffTimeCalculation() throws Exception {
+        // unit: 10 mins value: 2 expectedTime: 1200 (10 * 60 * 2)
+        verifyBackOffTimer("00000010", 1200);
+        // unit: 1 hour value: 4 expectedTime: 14400 (1 * 60 * 60 * 4)
+        verifyBackOffTimer("00100100", 14400);
+        // unit: 10 hours value: 3 expectedTime: (10 * 60 * 60 * 3)
+        verifyBackOffTimer("01000011", 108000);
+        // unit: 2 secs value: 21 expectedTime: 42 (2 * 21)
+        verifyBackOffTimer("01110101", 42);
+        // unit: 30 secs value: 31 expectedTime: 930 (30 * 31)
+        verifyBackOffTimer("10011111", 930);
+        // unit: 1 min value: 25 expectedTime: 1500 (1 * 60 * 25)
+        verifyBackOffTimer("10111001", 1500);
+        // unit: 1 hour value: 12 expectedTime: 43200 (1 * 60 * 60 * 12)
+        verifyBackOffTimer("11001100", 43200);
+        // deactivate - Should not report backoff time.
+        verifyBackOffTimer("11100100", -1);
+    }
 
-        Thread.sleep(2000);
+    private void verifyBackOffTimer(String backoffByte, long expectedBackoffTime) throws Exception {
+        String testApnName = "www.xyz.com";
+        IwlanError error = new IwlanError(new IkeInternalException(new Exception()));
+        Ike3gppBackoffTimer mockIke3gppBackoffTimer = mock(Ike3gppBackoffTimer.class);
+        List<Ike3gppInfo> ike3gppInfoList = new ArrayList<>();
+        ike3gppInfoList.add(mockIke3gppBackoffTimer);
+        doReturn(Ike3gppInfo.INFO_TYPE_NOTIFY_BACKOFF_TIMER)
+                .when(mockIke3gppBackoffTimer)
+                .getInfoType();
+        doReturn((byte) (int) Integer.parseInt(backoffByte, 2))
+                .when(mockIke3gppBackoffTimer)
+                .getBackoffTimer();
 
+        // if back off time expected is negative normal reportIwlanError should be called.
+        if (expectedBackoffTime < 0) {
+            doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(testApnName), eq(error));
+        } else {
+            doReturn(0L)
+                    .when(mEpdgTunnelManager)
+                    .reportIwlanError(eq(testApnName), eq(error), anyLong());
+        }
+
+        setupMockForGetConfig(null);
+        when(mMockEpdgSelector.getValidatedServerList(
+                        anyInt(),
+                        eq(false),
+                        eq(false),
+                        eq(mMockNetwork),
+                        any(EpdgSelector.EpdgSelectorCallback.class)))
+                .thenReturn(new IwlanError(IwlanError.NO_ERROR));
+        doReturn(null)
+                .doReturn(null)
+                .when(mMockIkeSessionCreator)
+                .createIkeSession(
+                        eq(mMockContext),
+                        any(IkeSessionParams.class),
+                        any(ChildSessionParams.class),
+                        any(Executor.class),
+                        any(IkeSessionCallback.class),
+                        any(ChildSessionCallback.class));
+        doReturn(true).when(mEpdgTunnelManager).canBringUpTunnel(eq(testApnName));
+
+        boolean ret =
+                mEpdgTunnelManager.bringUpTunnel(
+                        getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
+                        mMockIwlanTunnelCallback);
+        assertTrue(ret);
+
+        ArrayList<InetAddress> ipList = new ArrayList<>();
+        ipList.add(InetAddress.getByName("1.1.1.1"));
+        mEpdgTunnelManager.sendSelectionRequestComplete(
+                ipList, new IwlanError(IwlanError.NO_ERROR));
+        ArgumentCaptor<IkeSessionParams> ikeSessionParamsCaptor =
+                ArgumentCaptor.forClass(IkeSessionParams.class);
+        ArgumentCaptor<EpdgTunnelManager.TmIkeSessionCallback> ikeSessionCallbackCaptor =
+                ArgumentCaptor.forClass(EpdgTunnelManager.TmIkeSessionCallback.class);
         verify(mMockIkeSessionCreator, atLeastOnce())
                 .createIkeSession(
                         eq(mMockContext),
@@ -516,8 +667,25 @@ public class EpdgTunnelManagerTest {
                         any(Executor.class),
                         ikeSessionCallbackCaptor.capture(),
                         any(ChildSessionCallback.class));
-        ikeSessionParams = ikeSessionParamsCaptor.getValue();
-        assertEquals(ikeSessionParams.getServerHostname(), TEST_IP_ADDRESS3);
+        IkeSessionParams ikeSessionParams = ikeSessionParamsCaptor.getValue();
+        assertEquals(ikeSessionParams.getServerHostname(), ipList.get(0).getHostName());
+
+        Ike3gppExtension.Ike3gppCallback ike3gppCallback =
+                ikeSessionParams.getIke3gppExtension().getIke3gppCallback();
+        ike3gppCallback.onIke3gppPayloadsReceived(ike3gppInfoList);
+        EpdgTunnelManager.TmIkeSessionCallback ikeSessionCallback =
+                ikeSessionCallbackCaptor.getValue();
+        ikeSessionCallback.onClosedExceptionally(new IkeInternalException(new Exception()));
+
+        // if expected backoff time is negative - verify that backoff time is not reported.
+        if (expectedBackoffTime < 0) {
+            verify(mEpdgTunnelManager, times(1)).reportIwlanError(eq(testApnName), eq(error));
+        } else {
+            // Else - Verify reportIwlanError with correct backoff time is being called.
+            verify(mEpdgTunnelManager, times(1))
+                    .reportIwlanError(eq(testApnName), eq(error), eq(expectedBackoffTime));
+        }
+        verify(mMockIwlanTunnelCallback, atLeastOnce()).onClosed(eq(testApnName), eq(error));
     }
 
     private TunnelSetupRequest getBasicTunnelSetupRequest(String apnName, int apnIpProtocol) {

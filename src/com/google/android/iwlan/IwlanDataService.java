@@ -723,12 +723,12 @@ public class IwlanDataService extends DataService {
     @Override
     public void onCreate() {
         setAppContext(getApplicationContext());
-        IwlanBroadcastReceiver.startListening(getApplicationContext());
+        IwlanBroadcastReceiver.startListening(mContext);
     }
 
     @Override
     public void onDestroy() {
-        IwlanBroadcastReceiver.stopListening();
+        IwlanBroadcastReceiver.stopListening(mContext);
     }
 
     @Override

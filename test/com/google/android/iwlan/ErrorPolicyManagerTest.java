@@ -496,6 +496,68 @@ public class ErrorPolicyManagerTest {
         assertEquals(5, retryTime);
     }
 
+    @Test
+    public void testBackOffTime() throws Exception {
+        String apn = "ims";
+        String config =
+                "[{"
+                        + "\"ApnName\": \""
+                        + apn
+                        + "\","
+                        + "\"ErrorTypes\": [{"
+                        + getErrorTypeInJSON(
+                                "IKE_PROTOCOL_ERROR_TYPE",
+                                new String[] {"24", "34"},
+                                new String[] {"10", "15", "20"},
+                                new String[] {"APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"})
+                        + "}, {"
+                        + getErrorTypeInJSON(
+                                "GENERIC_ERROR_TYPE",
+                                new String[] {"SERVER_SELECTION_FAILED"},
+                                new String[] {"0"},
+                                new String[] {"APM_ENABLE_EVENT"})
+                        + "}]"
+                        + "}]";
+
+        PersistableBundle bundle = new PersistableBundle();
+        bundle.putString(ErrorPolicyManager.KEY_ERROR_POLICY_CONFIG_STRING, config);
+        setupMockForCarrierConfig(bundle);
+        mErrorPolicyManager
+                .mHandler
+                .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
+                .sendToTarget();
+
+        sleep(1000);
+
+        // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4,8,16
+        IwlanError iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
+        long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError, 2);
+
+        time = mErrorPolicyManager.getCurrentRetryTime(apn);
+        assertEquals(time, 2);
+
+        // sleep for 2 seconds and make sure that we can bring up tunnel after 2 secs
+        // as back off time - 2 secs should override the retry time in policy - 10 secs
+        sleep(2000);
+        boolean bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
+        assertTrue(bringUpTunnel);
+
+        // test whether the same error reported later uses the right policy
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(10, time);
+
+        bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
+        assertFalse(bringUpTunnel);
+
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError, 5);
+        time = mErrorPolicyManager.getCurrentRetryTime(apn);
+        assertEquals(time, 5);
+
+        // test whether the same error reported later starts from the beginning of retry array
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(10, time);
+    }
+
     private String getErrorTypeInJSON(
             String ErrorType,
             String[] errorDetails,

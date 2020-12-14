@@ -15,7 +15,8 @@ android_app {
     libs: [
         "android.net.ipsec.ike.stubs.system",
         "auto_value_annotations",
-        "framework-annotations-lib",
+	"framework-annotations-lib",
+	"framework-wifi"
     ],
 
     plugins: ["auto_value_plugin"],
@@ -26,7 +27,7 @@ android_app {
     product_specific: true,
     privileged: true,
     certificate: "platform",
-    sdk_version: "system_current",
+    sdk_version: "module_current",
 }
 
 prebuilt_etc {
