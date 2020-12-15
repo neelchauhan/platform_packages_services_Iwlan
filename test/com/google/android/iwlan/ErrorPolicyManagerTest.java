@@ -339,6 +339,56 @@ public class ErrorPolicyManagerTest {
     }
 
     @Test
+    public void testWifiDisableUnthrottle() throws Exception {
+        String apn = "ims";
+        String config =
+                "[{"
+                        + "\"ApnName\": \""
+                        + apn
+                        + "\","
+                        + "\"ErrorTypes\": [{"
+                        + getErrorTypeInJSON(
+                                "IKE_PROTOCOL_ERROR_TYPE",
+                                new String[] {"24", "34"},
+                                new String[] {"6", "12", "24"},
+                                new String[] {"APM_ENABLE_EVENT", "WIFI_DISABLE_EVENT"})
+                        + "}, {"
+                        + getErrorTypeInJSON(
+                                "GENERIC_ERROR_TYPE",
+                                new String[] {"SERVER_SELECTION_FAILED"},
+                                new String[] {"0"},
+                                new String[] {"APM_DISABLE_EVENT"})
+                        + "}]"
+                        + "}]";
+        PersistableBundle bundle = new PersistableBundle();
+        bundle.putString(ErrorPolicyManager.KEY_ERROR_POLICY_CONFIG_STRING, config);
+        setupMockForCarrierConfig(bundle);
+        mErrorPolicyManager
+                .mHandler
+                .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
+                .sendToTarget();
+        sleep(1000);
+
+        // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 6, 12, 24
+        IwlanError iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
+        long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(6, time);
+
+        mErrorPolicyManager
+                .mHandler
+                .obtainMessage(IwlanEventListener.WIFI_DISABLE_EVENT)
+                .sendToTarget();
+        sleep(500);
+
+        boolean bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
+        assertTrue(bringUpTunnel);
+
+        iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(6, time);
+    }
+
+    @Test
     public void testAPMUnthrottle() throws Exception {
         String apn = "ims";
         String config =

@@ -18,6 +18,7 @@ package com.google.android.iwlan;
 
 import android.content.Context;
 import android.content.Intent;
+import android.net.wifi.WifiManager;
 import android.os.Handler;
 import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
@@ -168,6 +169,18 @@ public class IwlanEventListener {
                 for (Map.Entry<Integer, IwlanEventListener> entry : mInstances.entrySet()) {
                     IwlanEventListener instance = entry.getValue();
                     instance.updateHandlers(event);
+                }
+                break;
+            case WifiManager.WIFI_STATE_CHANGED_ACTION:
+                int wifiState =
+                        intent.getIntExtra(
+                                WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_UNKNOWN);
+                if (wifiState == WifiManager.WIFI_STATE_DISABLED) {
+                    event = WIFI_DISABLE_EVENT;
+                    for (Map.Entry<Integer, IwlanEventListener> entry : mInstances.entrySet()) {
+                        IwlanEventListener instance = entry.getValue();
+                        instance.updateHandlers(event);
+                    }
                 }
                 break;
         }

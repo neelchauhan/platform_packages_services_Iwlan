@@ -24,6 +24,7 @@ import static org.mockito.Mockito.*;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Network;
+import android.net.wifi.WifiManager;
 import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
@@ -156,6 +157,16 @@ public class IwlanBroadcastReceiverTest {
         verify(mMockIwlanEventListener).onBroadcastReceived(intent);
     }
 
+    @Test
+    public void testWifiStateChanged() throws Exception {
+        final Intent intent = new Intent(WifiManager.WIFI_STATE_CHANGED_ACTION);
+        intent.putExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_DISABLED);
+
+        // Trigger broadcast
+        mBroadcastReceiver.onReceive(mMockContext, intent);
+
+        verify(mMockIwlanEventListener).onBroadcastReceived(intent);
+    }
     private void onReceiveMethodWithArgs(int apnType, int pcoId) {
         // Create intent object
         final Intent mIntent = new Intent(ACTION_CARRIER_SIGNAL_PCO_VALUE);

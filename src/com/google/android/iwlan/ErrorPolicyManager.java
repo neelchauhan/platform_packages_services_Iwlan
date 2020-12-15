@@ -663,6 +663,7 @@ public class ErrorPolicyManager {
     }
 
     private synchronized void unthrottleLastErrorOnEvent(int event) {
+        Log.d(LOG_TAG, "unthrottleLastErrorOnEvent: " + event);
         if (event == IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT) {
             mLastErrorForApn.clear();
             return;
@@ -858,6 +859,7 @@ public class ErrorPolicyManager {
                     break;
                 case IwlanEventListener.APM_ENABLE_EVENT:
                 case IwlanEventListener.APM_DISABLE_EVENT:
+                case IwlanEventListener.WIFI_DISABLE_EVENT:
                     unthrottleLastErrorOnEvent(msg.what);
                 default:
                     Log.d(TAG, "Unknown message received!");

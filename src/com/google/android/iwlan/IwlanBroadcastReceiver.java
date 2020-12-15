@@ -19,6 +19,8 @@ package com.google.android.iwlan;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.net.wifi.WifiManager;
 import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
@@ -30,6 +32,37 @@ import com.google.android.iwlan.epdg.EpdgSelector;
 public class IwlanBroadcastReceiver extends BroadcastReceiver {
     private static final String TAG = "IwlanBroadcastReceiver";
 
+    private static Context mContext;
+    private static boolean mIsReceiverRegistered = false;
+    private static IwlanBroadcastReceiver mInstance;
+
+    public static void startListening(Context context) {
+        if (mIsReceiverRegistered) {
+            Log.d(TAG, "startListening: Receiver already registered");
+            return;
+        }
+        mContext = context;
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
+        mContext.registerReceiver(getInstance(), intentFilter);
+        mIsReceiverRegistered = true;
+    }
+
+    public static void stopListening() {
+        if (!mIsReceiverRegistered) {
+            Log.d(TAG, "stopListening: Receiver not registered!");
+            return;
+        }
+        mContext.unregisterReceiver(getInstance());
+        mIsReceiverRegistered = false;
+    }
+
+    private static IwlanBroadcastReceiver getInstance() {
+        if (mInstance == null) {
+            mInstance = new IwlanBroadcastReceiver();
+        }
+        return mInstance;
+    }
     @Override
     public void onReceive(Context context, Intent intent) {
         String action = intent.getAction();
@@ -37,6 +70,7 @@ public class IwlanBroadcastReceiver extends BroadcastReceiver {
         switch (action) {
             case CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED:
             case Intent.ACTION_AIRPLANE_MODE_CHANGED:
+            case WifiManager.WIFI_STATE_CHANGED_ACTION:
                 IwlanEventListener.onBroadcastReceived(intent);
                 break;
             case TelephonyManager.ACTION_CARRIER_SIGNAL_PCO_VALUE:
