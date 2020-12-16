@@ -1,4 +1,18 @@
-// Copyright 2019 Google Inc. All Rights Reserved.
+/*
+ * Copyright 2020 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package com.google.android.iwlan;
 
@@ -26,8 +40,7 @@ public class IwlanHelper {
 
     public static String getNai(Context context, int slotId, boolean addWifiMac) {
         StringBuilder naiBuilder = new StringBuilder();
-        TelephonyManager tm =
-                (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
+        TelephonyManager tm = context.getSystemService(TelephonyManager.class);
         tm = tm.createForSubscriptionId(getSubId(context, slotId));
 
         SubscriptionInfo subInfo = getSubInfo(context, slotId);
@@ -37,7 +50,7 @@ public class IwlanHelper {
         naiBuilder.append('0').append(tm.getSubscriberId()).append('@');
 
         if (addWifiMac) {
-            WifiManager wifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
+            WifiManager wifiManager = context.getSystemService(WifiManager.class);
 
             if (wifiManager != null) {
                 WifiInfo wifiInfo = wifiManager.getConnectionInfo();
@@ -67,9 +80,7 @@ public class IwlanHelper {
     }
 
     private static SubscriptionInfo getSubInfo(Context context, int slotId) {
-        SubscriptionManager sm =
-                (SubscriptionManager)
-                        context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE);
+        SubscriptionManager sm = context.getSystemService(SubscriptionManager.class);
         SubscriptionInfo info = sm.getActiveSubscriptionInfoForSimSlotIndex(slotId);
 
         if (info == null) {
@@ -81,7 +92,7 @@ public class IwlanHelper {
 
     public static List<InetAddress> getAddressesForNetwork(Network network, Context context) {
         ConnectivityManager connectivityManager =
-                (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+                context.getSystemService(ConnectivityManager.class);
         List<InetAddress> gatewayList = new ArrayList<InetAddress>();
         for (LinkAddress laddr :
                 connectivityManager.getLinkProperties(network).getLinkAddresses()) {
@@ -137,7 +148,7 @@ public class IwlanHelper {
 
     public static <T> T getConfig(String key, Context context, int slotId) {
         CarrierConfigManager carrierConfigManager =
-                (CarrierConfigManager) context.getSystemService(Context.CARRIER_CONFIG_SERVICE);
+                context.getSystemService(CarrierConfigManager.class);
         if (carrierConfigManager == null) {
             throw new IllegalStateException("Carrier config manager is null.");
         }

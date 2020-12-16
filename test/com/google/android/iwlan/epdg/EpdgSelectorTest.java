@@ -1,4 +1,19 @@
-// Copyright 2020 Google Inc. All Rights Reserved.
+/*
+ * Copyright 2020 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.google.android.iwlan.epdg;
 
 import static org.junit.Assert.*;
@@ -81,7 +96,7 @@ public class EpdgSelectorTest {
     public void setUp() throws Exception {
         mEpdgSelector = new EpdgSelector(mMockContext, DEFAULT_SLOT_INDEX);
 
-        when(mMockContext.getSystemService(eq(Context.TELEPHONY_SUBSCRIPTION_SERVICE)))
+        when(mMockContext.getSystemService(eq(SubscriptionManager.class)))
                 .thenReturn(mMockSubscriptionManager);
 
         when(mMockSubscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(anyInt()))
@@ -102,7 +117,7 @@ public class EpdgSelectorTest {
 
         // Mock carrier configs with test bundle
         mTestBundle = new PersistableBundle();
-        when(mMockContext.getSystemService(eq(Context.CARRIER_CONFIG_SERVICE)))
+        when(mMockContext.getSystemService(eq(CarrierConfigManager.class)))
                 .thenReturn(mMockCarrierConfigManager);
         when(mMockCarrierConfigManager.getConfigForSubId(anyInt())).thenReturn(mTestBundle);
     }
@@ -314,6 +329,15 @@ public class EpdgSelectorTest {
         int testLac = 65484;
         int testTac = 65484;
         int testNrTac = 16764074;
+        String fqdn1_emergency = "lacffcc.sos.epdg.epc.mnc120.mcc311.pub.3gppnetwork.org";
+        String fqdn1 = "lacffcc.epdg.epc.mnc120.mcc311.pub.3gppnetwork.org";
+        String fqdn2_emergency =
+                "tac-lbcc.tac-hbff.tac.sos.epdg.epc.mnc120.mcc311.pub.3gppnetwork.org";
+        String fqdn2 = "tac-lbcc.tac-hbff.tac.epdg.epc.mnc120.mcc311.pub.3gppnetwork.org";
+        String fqdn3_emergency =
+                "tac-lbaa.tac-mbcc.tac-hbff.5gstac.sos.epdg.epc.mnc120.mcc311.pub.3gppnetwork.org";
+        String fqdn3 =
+                "tac-lbaa.tac-mbcc.tac-hbff.5gstac.epdg.epc.mnc120.mcc311.pub.3gppnetwork.org";
         List<CellInfo> fakeCellInfoArray = new ArrayList<CellInfo>();
 
         mTestBundle.putIntArray(
@@ -351,18 +375,9 @@ public class EpdgSelectorTest {
 
         when(mMockTelephonyManager.getAllCellInfo()).thenReturn(fakeCellInfoArray);
 
-        String expectedFqdn1 =
-                (isEmergency)
-                        ? "lacffcc.sos.epdg.epc.mnc120.mcc311.pub.3gppnetwork.org"
-                        : "lacffcc.epdg.epc.mnc120.mcc311.pub.3gppnetwork.org";
-        String expectedFqdn2 =
-                (isEmergency)
-                        ? "tac-lbcc.tac-hbff.tac.sos.epdg.epc.mnc120.mcc311.pub.3gppnetwork.org"
-                        : "tac-lbcc.tac-hbff.tac.epdg.epc.mnc120.mcc311.pub.3gppnetwork.org";
-        String expectedFqdn3 =
-                (isEmergency)
-                        ? "tac-lbaa.tac-mbcc.tac-hbff.5gstac.sos.epdg.epc.mnc120.mcc311.pub.3gppnetwork.org"
-                        : "tac-lbaa.tac-mbcc.tac-hbff.5gstac.epdg.epc.mnc120.mcc311.pub.3gppnetwork.org";
+        String expectedFqdn1 = (isEmergency) ? fqdn1_emergency : fqdn1;
+        String expectedFqdn2 = (isEmergency) ? fqdn2_emergency : fqdn2;
+        String expectedFqdn3 = (isEmergency) ? fqdn3_emergency : fqdn3;
 
         when(mMockNetwork.getAllByName(eq(expectedFqdn1)))
                 .thenReturn(new InetAddress[] {InetAddress.getByName(TEST_IP_ADDRESS)});
