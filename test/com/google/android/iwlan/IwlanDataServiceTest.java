@@ -35,6 +35,7 @@ import android.telephony.data.DataProfile;
 import android.telephony.data.DataService;
 import android.telephony.data.DataServiceCallback;
 import android.telephony.data.IDataServiceCallback;
+import android.telephony.data.SliceInfo;
 
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider;
 import com.google.android.iwlan.IwlanDataService.IwlanDataServiceProvider.IwlanTunnelCallback;
@@ -261,6 +262,7 @@ public class IwlanDataServiceTest {
                 DataService.REQUEST_REASON_NORMAL, /* DataService.REQUEST_REASON_NORMAL */
                 null, /* LinkProperties */
                 2, /* pdu session id */
+                null, /* sliceInfo */
                 mMockDataServiceCallback);
 
         verify(mMockDataServiceCallback, timeout(1000).times(1))
@@ -283,6 +285,7 @@ public class IwlanDataServiceTest {
                 DataService.REQUEST_REASON_NORMAL, /* DataService.REQUEST_REASON_NORMAL */
                 null, /* LinkProperties */
                 1, /* pdu session id */
+                null, /* sliceInfo */
                 mMockDataServiceCallback);
 
         verify(mMockDataServiceCallback, timeout(1000).times(1))
@@ -318,6 +321,7 @@ public class IwlanDataServiceTest {
                 DataService.REQUEST_REASON_NORMAL, /* DataService.REQUEST_REASON_NORMAL */
                 null, /* LinkProperties */
                 1, /* pduSessionId */
+                null, /* sliceInfo */
                 mMockDataServiceCallback);
 
         /* Check bringUpTunnel() is called. */
