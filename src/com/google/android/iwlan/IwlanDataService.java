@@ -577,13 +577,12 @@ public class IwlanDataService extends DataService {
                         getTunnelManager()
                                 .bringUpTunnel(tunnelReqBuilder.build(), getIwlanTunnelCallback());
                 Log.d(SUB_TAG, "bringup Tunnel with result:" + result);
-                if(!result)
-                {
+                if (!result) {
                     deliverCallback(
-                        CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
-                        DataServiceCallback.RESULT_ERROR_INVALID_ARG,
-                        callback,
-                        null);
+                            CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
+                            DataServiceCallback.RESULT_ERROR_INVALID_ARG,
+                            callback,
+                            null);
                     return;
                 }
             }
@@ -744,6 +743,10 @@ public class IwlanDataService extends DataService {
         if (!networkConnected) {
             for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
                 dp.forceCloseTunnelsInDeactivatingState();
+            }
+        } else {
+            if (transport == Transport.WIFI) {
+                IwlanEventListener.onWifiConnected(mContext);
             }
         }
     }
