@@ -39,6 +39,7 @@ import android.telephony.data.DataCallResponse;
 import android.telephony.data.DataProfile;
 import android.telephony.data.DataService;
 import android.telephony.data.DataServiceCallback;
+import android.telephony.data.SliceInfo;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -433,6 +434,7 @@ public class IwlanDataService extends DataService {
          * @param pduSessionId The pdu session id to be used for this data call. The standard range
          *     of values are 1-15 while 0 means no pdu session id was attached to this call.
          *     Reference: 3GPP TS 24.007 section 11.2.3.1b.
+         * @param sliceInfo The slice info related to this data call.
          * @param callback The result callback for this request.
          */
         @Override
@@ -444,6 +446,7 @@ public class IwlanDataService extends DataService {
                 int reason,
                 @Nullable LinkProperties linkProperties,
                 @IntRange(from = 0, to = 15) int pduSessionId,
+                @Nullable SliceInfo sliceInfo,
                 @NonNull DataServiceCallback callback) {
 
             Log.d(
