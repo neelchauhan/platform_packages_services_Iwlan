@@ -24,6 +24,8 @@ import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.PersistableBundle;
 import android.telephony.CarrierConfigManager;
+import android.telephony.ims.ImsManager;
+import android.telephony.ims.ImsMmTelManager;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
@@ -194,5 +196,43 @@ public class IwlanHelper {
             throw new IllegalStateException("Default config is null for: " + key);
         }
         return (T) bundle.get(key);
+    }
+
+    public static boolean isDefaultDataSlot(Context context, int slotId) {
+        SubscriptionManager sm = context.getSystemService(SubscriptionManager.class);
+        int ddsSlotId = sm.getSlotIndex(sm.getDefaultDataSubscriptionId());
+        if (ddsSlotId != sm.INVALID_SIM_SLOT_INDEX) {
+            if (ddsSlotId == slotId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean isCrossSimCallingEnabled(Context context, int slotId) {
+        boolean isCstEnabled = false;
+        SubscriptionManager sm = context.getSystemService(SubscriptionManager.class);
+        int subid = sm.INVALID_SUBSCRIPTION_ID;
+
+        try {
+            subid = getSubId(context, slotId);
+        } catch (Exception e) {
+            // Fail to query subscription id, just return false to avoid an exception.
+            return false;
+        }
+
+        ImsManager imsManager = context.getSystemService(ImsManager.class);
+        if (imsManager != null) {
+            ImsMmTelManager imsMmTelManager = imsManager.getImsMmTelManager(subid);
+            if (imsMmTelManager != null) {
+                try {
+                    isCstEnabled = imsMmTelManager.isCrossSimCallingEnabledByUser();
+                } catch (Exception e) {
+                    // Fail to query Cross-SIM calling setting, just return false to avoid an
+                    // exception.
+                }
+            }
+        }
+        return isCstEnabled;
     }
 }

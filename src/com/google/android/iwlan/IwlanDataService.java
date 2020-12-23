@@ -23,7 +23,6 @@ import android.net.LinkAddress;
 import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
-import android.net.NetworkRequest;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
@@ -57,26 +56,39 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
+import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
+
 public class IwlanDataService extends DataService {
 
     private static final String TAG = IwlanDataService.class.getSimpleName();
     private static Context mContext;
-    private IwlanWifiMonitorCallback mWifiMonitorCallback;
-    private HandlerThread mWifiCallbackHandlerThread;
-    private static boolean sWifiConnected = false;
+    private IwlanNetworkMonitorCallback mNetworkMonitorCallback;
+    private HandlerThread mNetworkCallbackHandlerThread;
+    private static boolean sNetworkConnected = false;
     private static Network sNetwork = null;
     // TODO: Change this to a hashmap as there is only one provider per slot
     private static List<IwlanDataServiceProvider> sIwlanDataServiceProviderList =
             new ArrayList<IwlanDataServiceProvider>();
 
-    // TODO: see if wifi monitor callback impl can be shared between dataservice and networkservice
-    static class IwlanWifiMonitorCallback extends ConnectivityManager.NetworkCallback {
+    @VisibleForTesting
+    enum Transport {
+        UNSPECIFIED_NETWORK,
+        MOBILE,
+        WIFI;
+    }
+
+    private static Transport sDefaultDataTransport = Transport.UNSPECIFIED_NETWORK;
+
+    // TODO: see if network monitor callback impl can be shared between dataservice and
+    // networkservice
+    static class IwlanNetworkMonitorCallback extends ConnectivityManager.NetworkCallback {
 
         /** Called when the framework connects and has declared a new network ready for use. */
         @Override
         public void onAvailable(Network network) {
-            Log.d(TAG, "onAvailable: " + network);
-            IwlanDataService.setWifiConnected(true, network);
+            Log.d(TAG, "onAvailable: " + (getTransport(network)).name());
+            IwlanDataService.setNetworkConnected(true, network, getTransport(network));
         }
 
         /**
@@ -88,7 +100,12 @@ public class IwlanDataService extends DataService {
          */
         @Override
         public void onLosing(Network network, int maxMsToLive) {
-            Log.d(TAG, "onLosing: maxMsToLive: " + maxMsToLive + " network:" + network);
+            Log.d(
+                    TAG,
+                    "onLosing: maxMsToLive: "
+                            + maxMsToLive
+                            + " network:"
+                            + (getTransport(network)).name());
         }
 
         /**
@@ -97,22 +114,47 @@ public class IwlanDataService extends DataService {
          */
         @Override
         public void onLost(Network network) {
-            Log.d(TAG, "onLost: " + network);
-            IwlanDataService.setWifiConnected(false, network);
+            Log.d(TAG, "onLost: " + (getTransport(network)).name());
+            IwlanDataService.setNetworkConnected(false, network, Transport.UNSPECIFIED_NETWORK);
         }
 
         /** Called when the network corresponding to this request changes {@link LinkProperties}. */
         @Override
         public void onLinkPropertiesChanged(Network network, LinkProperties linkProperties) {
-            Log.d(TAG, "onLinkPropertiesChanged: " + network + " linkprops:" + linkProperties);
+            Log.d(
+                    TAG,
+                    "onLinkPropertiesChanged: "
+                            + (getTransport(network)).name()
+                            + " linkprops:"
+                            + linkProperties);
+            IwlanDataService.setNetworkConnected(true, network, getTransport(network));
         }
 
         /** Called when access to the specified network is blocked or unblocked. */
         @Override
         public void onBlockedStatusChanged(Network network, boolean blocked) {
             // TODO: check if we need to handle this
-            Log.d(TAG, "onBlockedStatusChanged: " + network + " BLOCKED:" + blocked);
+            Log.d(
+                    TAG,
+                    "onBlockedStatusChanged: "
+                            + (getTransport(network)).name()
+                            + " BLOCKED:"
+                            + blocked);
         }
+    }
+
+    private static Transport getTransport(Network network) {
+        ConnectivityManager connectivityManager =
+                mContext.getSystemService(ConnectivityManager.class);
+        NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(network);
+        if (capabilities != null) {
+            if (capabilities.hasTransport(TRANSPORT_CELLULAR)) {
+                return Transport.MOBILE;
+            } else if (capabilities.hasTransport(TRANSPORT_WIFI)) {
+                return Transport.WIFI;
+            }
+        }
+        return Transport.UNSPECIFIED_NETWORK;
     }
 
     @VisibleForTesting
@@ -479,7 +521,11 @@ public class IwlanDataService extends DataService {
             }
 
             synchronized (mTunnelStateForApn) {
-                if (isWifiConnected() == false
+                if (isNetworkConnected(
+                                        IwlanHelper.isDefaultDataSlot(mContext, getSlotIndex()),
+                                        IwlanHelper.isCrossSimCallingEnabled(
+                                                mContext, getSlotIndex()))
+                                == false
                         || mTunnelStateForApn.get(dataProfile.getApn()) != null) {
                     deliverCallback(
                             CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
@@ -576,7 +622,14 @@ public class IwlanDataService extends DataService {
                         */
                         mTunnelStateForApn.get(apnName).setState(TunnelState.TUNNEL_IN_BRINGDOWN);
                         mTunnelStateForApn.get(apnName).setDataServiceCallback(callback);
-                        getTunnelManager().closeTunnel(apnName, !isWifiConnected());
+                        getTunnelManager()
+                                .closeTunnel(
+                                        apnName,
+                                        !isNetworkConnected(
+                                                IwlanHelper.isDefaultDataSlot(
+                                                        mContext, getSlotIndex()),
+                                                IwlanHelper.isCrossSimCallingEnabled(
+                                                        mContext, getSlotIndex())));
                         return;
                     }
                 }
@@ -596,6 +649,14 @@ public class IwlanDataService extends DataService {
                     if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGDOWN) {
                         getTunnelManager().closeTunnel(entry.getKey(), true);
                     }
+                }
+            }
+        }
+
+        private void forceCloseTunnels() {
+            synchronized (mTunnelStateForApn) {
+                for (Map.Entry<String, TunnelState> entry : mTunnelStateForApn.entrySet()) {
+                    getTunnelManager().closeTunnel(entry.getKey(), true);
                 }
             }
         }
@@ -646,16 +707,41 @@ public class IwlanDataService extends DataService {
     }
 
     @VisibleForTesting
-    static boolean isWifiConnected() {
-        return sWifiConnected;
+    static boolean isNetworkConnected(boolean isDds, boolean isCstEnabled) {
+        if (!isDds && isCstEnabled) {
+            // Only Non-DDS sub with CST enabled, can use any transport.
+            return sNetworkConnected;
+        } else {
+            // For all other cases, only wifi transport can be used.
+            return ((sDefaultDataTransport == Transport.WIFI) && sNetworkConnected);
+        }
     }
 
     @VisibleForTesting
-    static void setWifiConnected(boolean wifiConnected, Network network) {
-        sWifiConnected = wifiConnected;
+    static void setNetworkConnected(
+            boolean networkConnected, Network network, Transport transport) {
+        sNetworkConnected = networkConnected;
         sNetwork = network;
 
-        if (!wifiConnected) {
+        if (networkConnected) {
+            if (sDefaultDataTransport != Transport.UNSPECIFIED_NETWORK
+                    && transport != Transport.UNSPECIFIED_NETWORK
+                    && transport != sDefaultDataTransport) {
+                Log.d(
+                        TAG,
+                        "Transport was changed from "
+                                + sDefaultDataTransport.name()
+                                + " to "
+                                + transport.name());
+                // Perform forceClose when doing handover between iWLAN and iDDS.
+                for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
+                    dp.forceCloseTunnels();
+                }
+            }
+        }
+        sDefaultDataTransport = transport;
+
+        if (!networkConnected) {
             for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
                 dp.forceCloseTunnelsInDeactivatingState();
             }
@@ -690,29 +776,19 @@ public class IwlanDataService extends DataService {
         // TODO: validity check on slot index
         Log.d(TAG, "Creating provider for " + slotIndex);
 
-        if (mWifiMonitorCallback == null) {
-            // start monitoring wifi
-            mWifiCallbackHandlerThread =
+        if (mNetworkMonitorCallback == null) {
+            // start monitoring network
+            mNetworkCallbackHandlerThread =
                     new HandlerThread(IwlanNetworkService.class.getSimpleName());
-            mWifiCallbackHandlerThread.start();
-            Looper looper = mWifiCallbackHandlerThread.getLooper();
+            mNetworkCallbackHandlerThread.start();
+            Looper looper = mNetworkCallbackHandlerThread.getLooper();
             Handler handler = new Handler(looper);
 
-            /* register for wifi network callback */
-            NetworkRequest networkRequest =
-                    new NetworkRequest.Builder()
-                            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-                            // TODO: check if this may cause issues
-                            // with callbox if it is a piped in wifi connection
-                            .addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-                            .build();
-
+            // register for default network callback
             ConnectivityManager connectivityManager =
                     mContext.getSystemService(ConnectivityManager.class);
-            mWifiMonitorCallback = new IwlanWifiMonitorCallback();
-            connectivityManager.registerNetworkCallback(
-                    networkRequest, mWifiMonitorCallback, handler);
+            mNetworkMonitorCallback = new IwlanNetworkMonitorCallback();
+            connectivityManager.registerDefaultNetworkCallback(mNetworkMonitorCallback, handler);
             Log.d(TAG, "Registered with Connectivity Service");
         }
 
@@ -724,13 +800,13 @@ public class IwlanDataService extends DataService {
     public void removeDataServiceProvider(IwlanDataServiceProvider dp) {
         sIwlanDataServiceProviderList.remove(dp);
         if (sIwlanDataServiceProviderList.isEmpty()) {
-            // deinit wifi related stuff
+            // deinit network related stuff
             ConnectivityManager connectivityManager =
                     mContext.getSystemService(ConnectivityManager.class);
-            connectivityManager.unregisterNetworkCallback(mWifiMonitorCallback);
-            mWifiCallbackHandlerThread.quit(); // no need to quitSafely
-            mWifiCallbackHandlerThread = null;
-            mWifiMonitorCallback = null;
+            connectivityManager.unregisterNetworkCallback(mNetworkMonitorCallback);
+            mNetworkCallbackHandlerThread.quit(); // no need to quitSafely
+            mNetworkCallbackHandlerThread = null;
+            mNetworkMonitorCallback = null;
         }
     }
 
@@ -745,8 +821,8 @@ public class IwlanDataService extends DataService {
     }
 
     @VisibleForTesting
-    IwlanWifiMonitorCallback getWifiMonitorCallback() {
-        return mWifiMonitorCallback;
+    IwlanNetworkMonitorCallback getNetworkMonitorCallback() {
+        return mNetworkMonitorCallback;
     }
 
     @Override

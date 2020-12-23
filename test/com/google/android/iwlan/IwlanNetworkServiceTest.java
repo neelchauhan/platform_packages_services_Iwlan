@@ -116,7 +116,7 @@ public class IwlanNetworkServiceTest {
         assertTrue(mIwlanNetworkServiceProvider != null);
 
         // Set Wifi on and verify mCallback should receive onNetworkStateChanged.
-        mIwlanNetworkService.setWifiConnected(true);
+        mIwlanNetworkService.setNetworkConnected(true, IwlanNetworkService.Transport.WIFI);
         verify(mCallback, timeout(1000).times(1)).onNetworkStateChanged();
 
         // Set Sub active and verify mCallback should receive onNetworkStateChanged.
