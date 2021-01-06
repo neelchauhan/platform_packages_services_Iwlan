@@ -25,6 +25,7 @@ import android.os.Message;
 import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
 import android.telephony.DataFailCause;
+import android.telephony.data.DataService;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -717,10 +718,18 @@ public class ErrorPolicyManager {
             mLastErrorForApn.clear();
             return;
         }
+        String apn;
         for (Map.Entry<String, ErrorInfo> entry : mLastErrorForApn.entrySet()) {
             ErrorPolicy errorPolicy = entry.getValue().getErrorPolicy();
             if (errorPolicy.canUnthrottle(event)) {
-                mLastErrorForApn.remove(entry.getKey());
+                apn = entry.getKey();
+                mLastErrorForApn.remove(apn);
+                DataService.DataServiceProvider provider =
+                      IwlanDataService.getDataServiceProvider(mSlotId);
+                if (provider != null) {
+                    provider.notifyApnUnthrottled(apn);
+                }
+                Log.d(LOG_TAG, "unthrottled error for: " + apn);
             }
         }
     }
@@ -936,6 +945,7 @@ public class ErrorPolicyManager {
                 case IwlanEventListener.APM_DISABLE_EVENT:
                 case IwlanEventListener.WIFI_DISABLE_EVENT:
                     unthrottleLastErrorOnEvent(msg.what);
+                    break;
                 default:
                     Log.d(TAG, "Unknown message received!");
                     break;
