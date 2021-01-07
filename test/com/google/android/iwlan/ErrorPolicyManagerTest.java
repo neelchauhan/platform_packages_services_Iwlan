@@ -16,6 +16,8 @@
 
 package com.google.android.iwlan;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -33,26 +35,24 @@ import android.telephony.CarrierConfigManager;
 import android.telephony.DataFailCause;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
+import android.telephony.data.DataService;
 
 import androidx.test.InstrumentationRegistry;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
 import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnit;
-import org.mockito.junit.MockitoRule;
+import org.mockito.MockitoAnnotations;
+import org.mockito.MockitoSession;
+import org.mockito.quality.Strictness;
 
 import java.io.InputStream;
 
-@RunWith(JUnit4.class)
 public class ErrorPolicyManagerTest {
     private static final String TAG = "ErrorPolicyManagerTest";
 
-    @Rule public final MockitoRule mockito = MockitoJUnit.rule();
+    // @Rule public final MockitoRule mockito = MockitoJUnit.rule();
 
     private ErrorPolicyManager mErrorPolicyManager;
     private static final int DEFAULT_SLOT_INDEX = 0;
@@ -62,9 +62,19 @@ public class ErrorPolicyManagerTest {
     @Mock CarrierConfigManager mMockCarrierConfigManager;
     @Mock SubscriptionManager mMockSubscriptionManager;
     @Mock SubscriptionInfo mMockSubscriptionInfo;
+    @Mock DataService.DataServiceProvider mMockDataServiceProvider;
+    MockitoSession mStaticMockSession;
 
     @Before
     public void setUp() throws Exception {
+        MockitoAnnotations.initMocks(this);
+        mStaticMockSession =
+                mockitoSession()
+                        .mockStatic(IwlanDataService.class)
+                        .strictness(Strictness.LENIENT)
+                        .startMocking();
+        when(IwlanDataService.getDataServiceProvider(anyInt()))
+                .thenReturn(mMockDataServiceProvider);
         AssetManager mockAssetManager = mock(AssetManager.class);
         Context context = InstrumentationRegistry.getTargetContext();
         InputStream is = context.getResources().getAssets().open("defaultiwlanerrorconfig.json");
@@ -75,7 +85,8 @@ public class ErrorPolicyManagerTest {
     }
 
     @After
-    public void tearDown() throws Exception {
+    public void cleanUp() throws Exception {
+        mStaticMockSession.finishMocking();
         mErrorPolicyManager.releaseInstance();
     }
 
@@ -379,6 +390,7 @@ public class ErrorPolicyManagerTest {
                 .obtainMessage(IwlanEventListener.WIFI_DISABLE_EVENT)
                 .sendToTarget();
         sleep(500);
+        verify(mMockDataServiceProvider, times(1)).notifyApnUnthrottled(eq(apn));
 
         boolean bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
         assertTrue(bringUpTunnel);
@@ -429,6 +441,7 @@ public class ErrorPolicyManagerTest {
                 .obtainMessage(IwlanEventListener.APM_ENABLE_EVENT)
                 .sendToTarget();
         sleep(500);
+        verify(mMockDataServiceProvider, times(1)).notifyApnUnthrottled(eq(apn));
 
         boolean bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
         assertTrue(bringUpTunnel);

@@ -65,6 +65,7 @@ public class IwlanDataService extends DataService {
     private HandlerThread mWifiCallbackHandlerThread;
     private static boolean sWifiConnected = false;
     private static Network sNetwork = null;
+    // TODO: Change this to a hashmap as there is only one provider per slot
     private static List<IwlanDataServiceProvider> sIwlanDataServiceProviderList =
             new ArrayList<IwlanDataServiceProvider>();
 
@@ -650,6 +651,25 @@ public class IwlanDataService extends DataService {
                 dp.forceCloseTunnelsInDeactivatingState();
             }
         }
+    }
+
+    /**
+     * Get the DataServiceProvider associated with the slotId
+     *
+     * @param slotId slot index
+     * @return DataService.DataServiceProvider associated with the slot
+     */
+    public static DataService.DataServiceProvider getDataServiceProvider(int slotId) {
+        DataServiceProvider ret = null;
+        if (!sIwlanDataServiceProviderList.isEmpty()) {
+            for (IwlanDataServiceProvider provider : sIwlanDataServiceProviderList) {
+                if (provider.getSlotIndex() == slotId) {
+                    ret = provider;
+                    break;
+                }
+            }
+        }
+        return ret;
     }
 
     public static Context getContext() {

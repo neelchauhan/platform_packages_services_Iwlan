@@ -130,8 +130,8 @@ public class IwlanEventListener {
             handlers.remove(handler);
             if (handlers.isEmpty()) {
                 eventHandlers.delete(eventHandlers.keyAt(i));
+                i--;
             }
-            eventHandlers.valueAt(i).remove(handler);
         }
         if (eventHandlers.size() == 0) {
             mInstances.remove(mSlotId, this);
