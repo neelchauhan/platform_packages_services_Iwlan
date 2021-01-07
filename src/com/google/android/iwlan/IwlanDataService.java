@@ -262,7 +262,7 @@ public class IwlanDataService extends DataService {
                                         .getDataFailCause(apnName));
                         respBuilder.setRetryDurationMillis(
                                 ErrorPolicyManager.getInstance(mContext, getSlotIndex())
-                                        .getCurrentRetryTime(apnName));
+                                        .getCurrentRetryTimeMs(apnName));
 
                         deliverCallback(
                                 CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
