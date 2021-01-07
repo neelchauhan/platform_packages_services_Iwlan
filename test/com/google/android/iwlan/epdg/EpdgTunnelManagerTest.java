@@ -40,7 +40,7 @@ import android.net.ipsec.ike.exceptions.IkeInternalException;
 import android.net.ipsec.ike.exceptions.InvalidIkeSpiException;
 import android.net.ipsec.ike.ike3gpp.Ike3gppBackoffTimer;
 import android.net.ipsec.ike.ike3gpp.Ike3gppExtension;
-import android.net.ipsec.ike.ike3gpp.Ike3gppInfo;
+import android.net.ipsec.ike.ike3gpp.Ike3gppData;
 import android.os.Looper;
 import android.os.PersistableBundle;
 import android.telephony.CarrierConfigManager;
@@ -607,11 +607,11 @@ public class EpdgTunnelManagerTest {
         String testApnName = "www.xyz.com";
         IwlanError error = new IwlanError(new IkeInternalException(new Exception()));
         Ike3gppBackoffTimer mockIke3gppBackoffTimer = mock(Ike3gppBackoffTimer.class);
-        List<Ike3gppInfo> ike3gppInfoList = new ArrayList<>();
+        List<Ike3gppData> ike3gppInfoList = new ArrayList<>();
         ike3gppInfoList.add(mockIke3gppBackoffTimer);
-        doReturn(Ike3gppInfo.INFO_TYPE_NOTIFY_BACKOFF_TIMER)
+        doReturn(Ike3gppData.DATA_TYPE_NOTIFY_BACKOFF_TIMER)
                 .when(mockIke3gppBackoffTimer)
-                .getInfoType();
+                .getDataType();
         doReturn((byte) (int) Integer.parseInt(backoffByte, 2))
                 .when(mockIke3gppBackoffTimer)
                 .getBackoffTimer();
@@ -670,9 +670,9 @@ public class EpdgTunnelManagerTest {
         IkeSessionParams ikeSessionParams = ikeSessionParamsCaptor.getValue();
         assertEquals(ikeSessionParams.getServerHostname(), ipList.get(0).getHostName());
 
-        Ike3gppExtension.Ike3gppCallback ike3gppCallback =
-                ikeSessionParams.getIke3gppExtension().getIke3gppCallback();
-        ike3gppCallback.onIke3gppPayloadsReceived(ike3gppInfoList);
+        Ike3gppExtension.Ike3gppDataListener ike3gppCallback =
+                ikeSessionParams.getIke3gppExtension().getIke3gppDataListener();
+        ike3gppCallback.onIke3gppDataReceived(ike3gppInfoList);
         EpdgTunnelManager.TmIkeSessionCallback ikeSessionCallback =
                 ikeSessionCallbackCaptor.getValue();
         ikeSessionCallback.onClosedExceptionally(new IkeInternalException(new Exception()));
