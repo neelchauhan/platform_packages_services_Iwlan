@@ -359,13 +359,13 @@ public class ErrorPolicyManager {
      * Returns the current retryTime based on the lastErrorForApn
      *
      * @param apn apn name for which curren retry time is needed
-     * @return long current retry time
+     * @return long current retry time in milliseconds
      */
-    public synchronized long getCurrentRetryTime(String apn) {
+    public synchronized long getCurrentRetryTimeMs(String apn) {
         if (!mLastErrorForApn.containsKey(apn)) {
             return -1;
         }
-        return mLastErrorForApn.get(apn).getCurrentRetryTime();
+        return TimeUnit.SECONDS.toMillis(mLastErrorForApn.get(apn).getCurrentRetryTime());
     }
 
     /**
@@ -725,7 +725,7 @@ public class ErrorPolicyManager {
                 apn = entry.getKey();
                 mLastErrorForApn.remove(apn);
                 DataService.DataServiceProvider provider =
-                      IwlanDataService.getDataServiceProvider(mSlotId);
+                        IwlanDataService.getDataServiceProvider(mSlotId);
                 if (provider != null) {
                     provider.notifyApnUnthrottled(apn);
                 }
