@@ -16,8 +16,8 @@
 
 package com.google.android.iwlan.epdg;
 
-import static android.net.ipsec.ike.ike3gpp.Ike3gppInfo.INFO_TYPE_NOTIFY_BACKOFF_TIMER;
-import static android.net.ipsec.ike.ike3gpp.Ike3gppInfo.INFO_TYPE_NOTIFY_N1_MODE_INFORMATION;
+import static android.net.ipsec.ike.ike3gpp.Ike3gppData.DATA_TYPE_NOTIFY_BACKOFF_TIMER;
+import static android.net.ipsec.ike.ike3gpp.Ike3gppData.DATA_TYPE_NOTIFY_N1_MODE_INFORMATION;
 import static android.system.OsConstants.AF_INET;
 import static android.system.OsConstants.AF_INET6;
 
@@ -46,8 +46,8 @@ import android.net.ipsec.ike.TunnelModeChildSessionParams;
 import android.net.ipsec.ike.exceptions.IkeException;
 import android.net.ipsec.ike.exceptions.IkeProtocolException;
 import android.net.ipsec.ike.ike3gpp.Ike3gppBackoffTimer;
+import android.net.ipsec.ike.ike3gpp.Ike3gppData;
 import android.net.ipsec.ike.ike3gpp.Ike3gppExtension;
-import android.net.ipsec.ike.ike3gpp.Ike3gppInfo;
 import android.net.ipsec.ike.ike3gpp.Ike3gppN1ModeInformation;
 import android.net.ipsec.ike.ike3gpp.Ike3gppParams;
 import android.os.Handler;
@@ -350,7 +350,7 @@ public class EpdgTunnelManager {
     }
 
     @VisibleForTesting
-    class TmIke3gppCallback extends Ike3gppExtension.Ike3gppCallback {
+    class TmIke3gppCallback implements Ike3gppExtension.Ike3gppDataListener {
         private final String mApnName;
 
         private TmIke3gppCallback(String apnName) {
@@ -358,13 +358,13 @@ public class EpdgTunnelManager {
         }
 
         @Override
-        public void onIke3gppPayloadsReceived(List<Ike3gppInfo> payloads) {
+        public void onIke3gppDataReceived(List<Ike3gppData> payloads) {
             if (payloads != null && !payloads.isEmpty()) {
                 TunnelConfig tunnelConfig = mApnNameToTunnelConfig.get(mApnName);
-                for (Ike3gppInfo payload : payloads) {
-                    if (payload.getInfoType() == INFO_TYPE_NOTIFY_N1_MODE_INFORMATION) {
+                for (Ike3gppData payload : payloads) {
+                    if (payload.getDataType() == DATA_TYPE_NOTIFY_N1_MODE_INFORMATION) {
                         tunnelConfig.setSnssai(((Ike3gppN1ModeInformation) payload).getSnssai());
-                    } else if (payload.getInfoType() == INFO_TYPE_NOTIFY_BACKOFF_TIMER) {
+                    } else if (payload.getDataType() == DATA_TYPE_NOTIFY_BACKOFF_TIMER) {
                         long backoffTime =
                                 decodeBackoffTime(
                                         ((Ike3gppBackoffTimer) payload).getBackoffTimer());
