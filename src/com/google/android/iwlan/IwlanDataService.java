@@ -367,6 +367,7 @@ public class IwlanDataService extends DataService {
                     .setInterfaceName(tunnelState.getTunnelLinkProperties().ifaceName())
                     .setGatewayAddresses(gatewayList)
                     .setLinkStatus(DataCallResponse.LINK_STATUS_ACTIVE)
+                    .setMtu(tunnelState.getLinkMtu())
                     .setMtuV4(tunnelState.getLinkMtu())
                     .setMtuV6(tunnelState.getLinkMtu())
                     .build(); // underlying n/w is same
