@@ -531,7 +531,15 @@ public class IwlanDataService extends DataService {
                         getTunnelManager()
                                 .bringUpTunnel(tunnelReqBuilder.build(), getIwlanTunnelCallback());
                 Log.d(SUB_TAG, "bringup Tunnel with result:" + result);
-                // TODO: store and use return value
+                if(!result)
+                {
+                    deliverCallback(
+                        CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
+                        DataServiceCallback.RESULT_ERROR_INVALID_ARG,
+                        callback,
+                        null);
+                    return;
+                }
             }
         }
 
