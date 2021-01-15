@@ -752,23 +752,26 @@ public class ErrorPolicyManager {
         }
 
         long getRetryTime(int index) {
-            if (index < 0 || index >= mRetryArray.size()) {
-                // if the last item in the retryArray is "-1" set the
-                // index to the last item so the retry time before
-                // it is repeated indefinitely.
-                if (mRetryArray.get(mRetryArray.size() - 1) == -1L) {
-                    index = mRetryArray.size() - 1;
-                } else {
-                    return -1;
+            long retryTime = -1;
+            if (mRetryArray.size() > 0) {
+                // If the index is greater than or equal to the last element's index
+                // and if the last item in the retryArray is "-1" use the retryTime
+                // of the element before the last element to repeat the element.
+                if (index >= mRetryArray.size() - 1
+                        && mRetryArray.get(mRetryArray.size() - 1) == -1L) {
+                    index = mRetryArray.size() - 2;
+                }
+                if (index >= 0 && index < mRetryArray.size()) {
+                    retryTime = mRetryArray.get(index);
                 }
             }
 
-            // if the index is the last element and the element there is "-1"
-            // then repeat the retry time before it indefinitely.
-            if (mRetryArray.get(index) == -1L && index == mRetryArray.size() - 1) {
-                return mRetryArray.get(index - 1);
+            // retryTime -1 represents indefinite failure. In that case
+            // return time that represents 1 day to not retry for that day.
+            if (retryTime == -1L) {
+                retryTime = TimeUnit.DAYS.toSeconds(1);
             }
-            return mRetryArray.get(index);
+            return retryTime;
         }
 
         @ErrorPolicyErrorType

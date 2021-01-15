@@ -132,18 +132,18 @@ public class ErrorPolicyManagerTest {
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(16, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
-        assertEquals(-1, time);
+        assertEquals(86400, time);
 
-        // GENERIC_PROTOCOL_ERROR_TYPE - SERVER_SELECTION_FAILED and retryArray = 0, 0
+        // GENERIC_PROTOCOL_ERROR_TYPE - SERVER_SELECTION_FAILED and retryArray = 0
         iwlanError = new IwlanError(IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(0, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
-        assertEquals(-1, time);
+        assertEquals(86400, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
-        assertEquals(-1, time);
+        assertEquals(86400, time);
 
-        // Fallback case GENERIC_PROTOCOL_ERROR_TYPE(44) and retryArray is 5, 10, 15 as in
+        // Fallback case GENERIC_PROTOCOL_ERROR_TYPE(44) and retryArray is 5, 10, -1 as in
         // DEFAULT_CONFIG
         iwlanError = new IwlanError(new ChildSaNotFoundException(10));
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
@@ -239,7 +239,7 @@ public class ErrorPolicyManagerTest {
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(16, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
-        assertEquals(-1, time);
+        assertEquals(86400, time);
 
         // IKE_PROTOCOL_ERROR_TYPE(44) and retryArray = 0 as it will fallback to
         // IKE_PROTOCOL_ERROR_TYPE generic fallback first.
@@ -247,7 +247,7 @@ public class ErrorPolicyManagerTest {
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(0, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
-        assertEquals(-1, time);
+        assertEquals(86400, time);
     }
 
     @Test
