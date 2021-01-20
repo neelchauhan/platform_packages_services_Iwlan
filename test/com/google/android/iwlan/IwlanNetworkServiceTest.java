@@ -125,14 +125,8 @@ public class IwlanNetworkServiceTest {
 
         // Create expected NetworkRegistrationInfo
         NetworkRegistrationInfo.Builder expectedStateBuilder =
-                new NetworkRegistrationInfo.Builder();
-        expectedStateBuilder
-                .setAccessNetworkTechnology(TelephonyManager.NETWORK_TYPE_IWLAN)
-                .setAvailableServices(Arrays.asList(NetworkRegistrationInfo.SERVICE_TYPE_DATA))
-                .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WLAN)
-                .setEmergencyOnly(!mIsSubActive)
-                .setDomain(domain)
-                .setRegistrationState(NetworkRegistrationInfo.REGISTRATION_STATE_HOME);
+                generateStateBuilder(
+                        domain, mIsSubActive, NetworkRegistrationInfo.REGISTRATION_STATE_HOME);
 
         mBinder.requestNetworkRegistrationInfo(0, domain, mCallback);
 
@@ -140,5 +134,229 @@ public class IwlanNetworkServiceTest {
                 .onRequestNetworkRegistrationInfoComplete(
                         eq(NetworkServiceCallback.RESULT_SUCCESS),
                         eq(expectedStateBuilder.build()));
+
+        IwlanNetworkService.setNetworkConnected(
+                false, IwlanNetworkService.Transport.UNSPECIFIED_NETWORK);
+    }
+
+    @Test
+    public void testNetworkRegistrationInfoForCellularAndCstDisabled() throws Exception {
+        int domain = NetworkRegistrationInfo.DOMAIN_PS;
+        boolean mIsSubActive = true;
+        long startTime;
+
+        // Wait for IwlanNetworkServiceProvider created and timeout is 1 second.
+        startTime = System.currentTimeMillis();
+        while (System.currentTimeMillis() - startTime < 1000) {
+            mIwlanNetworkServiceProvider =
+                    mIwlanNetworkService.getNetworkServiceProvider(DEFAULT_SLOT_INDEX);
+            if (mIwlanNetworkServiceProvider != null) {
+                break;
+            }
+        }
+
+        lenient()
+                .when(
+                        IwlanHelper.isCrossSimCallingEnabled(
+                                eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(false);
+        lenient()
+                .when(IwlanHelper.isDefaultDataSlot(eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(true);
+
+        assertTrue(mIwlanNetworkServiceProvider != null);
+
+        // Set Network on and verify mCallback should receive onNetworkStateChanged.
+        mIwlanNetworkService.setNetworkConnected(true, IwlanNetworkService.Transport.MOBILE);
+        verify(mCallback, timeout(1000).times(1)).onNetworkStateChanged();
+
+        // Set Sub active and verify mCallback should receive onNetworkStateChanged.
+        mIwlanNetworkServiceProvider.subscriptionChanged();
+        verify(mCallback, timeout(1000).times(2)).onNetworkStateChanged();
+
+        // Create expected NetworkRegistrationInfo
+        NetworkRegistrationInfo.Builder expectedStateBuilder =
+                generateStateBuilder(
+                        domain,
+                        mIsSubActive,
+                        NetworkRegistrationInfo.REGISTRATION_STATE_NOT_REGISTERED_SEARCHING);
+
+        mBinder.requestNetworkRegistrationInfo(0, domain, mCallback);
+
+        verify(mCallback, timeout(1000).times(1))
+                .onRequestNetworkRegistrationInfoComplete(
+                        eq(NetworkServiceCallback.RESULT_SUCCESS),
+                        eq(expectedStateBuilder.build()));
+
+        IwlanNetworkService.setNetworkConnected(
+                false, IwlanNetworkService.Transport.UNSPECIFIED_NETWORK);
+    }
+
+    @Test
+    public void testNetworkRegistrationInfoForCellularAndCstEnabled() throws Exception {
+        int domain = NetworkRegistrationInfo.DOMAIN_PS;
+        boolean mIsSubActive = true;
+        long startTime;
+
+        // Wait for IwlanNetworkServiceProvider created and timeout is 1 second.
+        startTime = System.currentTimeMillis();
+        while (System.currentTimeMillis() - startTime < 1000) {
+            mIwlanNetworkServiceProvider =
+                    mIwlanNetworkService.getNetworkServiceProvider(DEFAULT_SLOT_INDEX);
+            if (mIwlanNetworkServiceProvider != null) {
+                break;
+            }
+        }
+
+        lenient()
+                .when(
+                        IwlanHelper.isCrossSimCallingEnabled(
+                                eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(true);
+        lenient()
+                .when(IwlanHelper.isDefaultDataSlot(eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(false);
+
+        assertTrue(mIwlanNetworkServiceProvider != null);
+
+        // Set Network on and verify mCallback should receive onNetworkStateChanged.
+        mIwlanNetworkService.setNetworkConnected(true, IwlanNetworkService.Transport.MOBILE);
+        verify(mCallback, timeout(1000).times(1)).onNetworkStateChanged();
+
+        // Set Sub active and verify mCallback should receive onNetworkStateChanged.
+        mIwlanNetworkServiceProvider.subscriptionChanged();
+        verify(mCallback, timeout(1000).times(2)).onNetworkStateChanged();
+
+        // Create expected NetworkRegistrationInfo
+        NetworkRegistrationInfo.Builder expectedStateBuilder =
+                generateStateBuilder(
+                        domain, mIsSubActive, NetworkRegistrationInfo.REGISTRATION_STATE_HOME);
+
+        mBinder.requestNetworkRegistrationInfo(0, domain, mCallback);
+
+        verify(mCallback, timeout(1000).times(1))
+                .onRequestNetworkRegistrationInfoComplete(
+                        eq(NetworkServiceCallback.RESULT_SUCCESS),
+                        eq(expectedStateBuilder.build()));
+
+        IwlanNetworkService.setNetworkConnected(
+                false, IwlanNetworkService.Transport.UNSPECIFIED_NETWORK);
+    }
+
+    @Test
+    public void testNetworkRegistrationInfoForWiFiAndCstEnabled() throws Exception {
+        int domain = NetworkRegistrationInfo.DOMAIN_PS;
+        boolean mIsSubActive = true;
+        long startTime;
+
+        // Wait for IwlanNetworkServiceProvider created and timeout is 1 second.
+        startTime = System.currentTimeMillis();
+        while (System.currentTimeMillis() - startTime < 1000) {
+            mIwlanNetworkServiceProvider =
+                    mIwlanNetworkService.getNetworkServiceProvider(DEFAULT_SLOT_INDEX);
+            if (mIwlanNetworkServiceProvider != null) {
+                break;
+            }
+        }
+
+        lenient()
+                .when(
+                        IwlanHelper.isCrossSimCallingEnabled(
+                                eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(true);
+        lenient()
+                .when(IwlanHelper.isDefaultDataSlot(eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(true);
+
+        assertTrue(mIwlanNetworkServiceProvider != null);
+
+        // Set Network on and verify mCallback should receive onNetworkStateChanged.
+        mIwlanNetworkService.setNetworkConnected(true, IwlanNetworkService.Transport.WIFI);
+        verify(mCallback, timeout(1000).times(1)).onNetworkStateChanged();
+
+        // Set Sub active and verify mCallback should receive onNetworkStateChanged.
+        mIwlanNetworkServiceProvider.subscriptionChanged();
+        verify(mCallback, timeout(1000).times(2)).onNetworkStateChanged();
+
+        // Create expected NetworkRegistrationInfo
+        NetworkRegistrationInfo.Builder expectedStateBuilder =
+                generateStateBuilder(
+                        domain, mIsSubActive, NetworkRegistrationInfo.REGISTRATION_STATE_HOME);
+
+        mBinder.requestNetworkRegistrationInfo(0, domain, mCallback);
+
+        verify(mCallback, timeout(1000).times(1))
+                .onRequestNetworkRegistrationInfoComplete(
+                        eq(NetworkServiceCallback.RESULT_SUCCESS),
+                        eq(expectedStateBuilder.build()));
+
+        IwlanNetworkService.setNetworkConnected(
+                false, IwlanNetworkService.Transport.UNSPECIFIED_NETWORK);
+    }
+
+    @Test
+    public void testNetworkRegistrationInfoForWiFiAndCstDisabled() throws Exception {
+        int domain = NetworkRegistrationInfo.DOMAIN_PS;
+        boolean mIsSubActive = true;
+        long startTime;
+
+        // Wait for IwlanNetworkServiceProvider created and timeout is 1 second.
+        startTime = System.currentTimeMillis();
+        while (System.currentTimeMillis() - startTime < 1000) {
+            mIwlanNetworkServiceProvider =
+                    mIwlanNetworkService.getNetworkServiceProvider(DEFAULT_SLOT_INDEX);
+            if (mIwlanNetworkServiceProvider != null) {
+                break;
+            }
+        }
+
+        lenient()
+                .when(
+                        IwlanHelper.isCrossSimCallingEnabled(
+                                eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(false);
+        lenient()
+                .when(IwlanHelper.isDefaultDataSlot(eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(true);
+
+        assertTrue(mIwlanNetworkServiceProvider != null);
+
+        // Set Network on and verify mCallback should receive onNetworkStateChanged.
+        mIwlanNetworkService.setNetworkConnected(true, IwlanNetworkService.Transport.WIFI);
+        verify(mCallback, timeout(1000).times(1)).onNetworkStateChanged();
+
+        // Set Sub active and verify mCallback should receive onNetworkStateChanged.
+        mIwlanNetworkServiceProvider.subscriptionChanged();
+        verify(mCallback, timeout(1000).times(2)).onNetworkStateChanged();
+
+        // Create expected NetworkRegistrationInfo
+        NetworkRegistrationInfo.Builder expectedStateBuilder =
+                generateStateBuilder(
+                        domain, mIsSubActive, NetworkRegistrationInfo.REGISTRATION_STATE_HOME);
+
+        mBinder.requestNetworkRegistrationInfo(0, domain, mCallback);
+
+        verify(mCallback, timeout(1000).times(1))
+                .onRequestNetworkRegistrationInfoComplete(
+                        eq(NetworkServiceCallback.RESULT_SUCCESS),
+                        eq(expectedStateBuilder.build()));
+
+        IwlanNetworkService.setNetworkConnected(
+                false, IwlanNetworkService.Transport.UNSPECIFIED_NETWORK);
+    }
+
+    private NetworkRegistrationInfo.Builder generateStateBuilder(
+            int domain, boolean isSubActive, int registrationState) {
+        NetworkRegistrationInfo.Builder expectedStateBuilder =
+                new NetworkRegistrationInfo.Builder();
+        expectedStateBuilder
+                .setAccessNetworkTechnology(TelephonyManager.NETWORK_TYPE_IWLAN)
+                .setAvailableServices(Arrays.asList(NetworkRegistrationInfo.SERVICE_TYPE_DATA))
+                .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WLAN)
+                .setEmergencyOnly(!isSubActive)
+                .setDomain(domain)
+                .setRegistrationState(registrationState);
+
+        return expectedStateBuilder;
     }
 }

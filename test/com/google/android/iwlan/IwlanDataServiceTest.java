@@ -144,6 +144,7 @@ public class IwlanDataServiceTest {
                 mockitoSession()
                         .mockStatic(ErrorPolicyManager.class)
                         .mockStatic(IwlanBroadcastReceiver.class)
+                        .mockStatic(IwlanHelper.class)
                         .strictness(Strictness.LENIENT)
                         .startMocking();
 
@@ -469,5 +470,85 @@ public class IwlanDataServiceTest {
                         .setPreferred(true)
                         .build();
         return dp;
+    }
+
+    @Test
+    public void testIwlanSetupDataCallWithCellularAndCstDisabled() {
+        DataProfile dp = buildDataProfile();
+
+        /* Mobile is connected */
+        mIwlanDataService.setNetworkConnected(
+                true, mMockNetwork, IwlanDataService.Transport.MOBILE);
+
+        lenient()
+                .when(
+                        IwlanHelper.isCrossSimCallingEnabled(
+                                eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(false);
+        lenient()
+                .when(IwlanHelper.isDefaultDataSlot(eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(true);
+
+        mIwlanDataServiceProvider.setupDataCall(
+                AccessNetworkType.IWLAN, /* AccessNetworkType */
+                dp, /* dataProfile */
+                false, /* isRoaming */
+                true, /* allowRoaming */
+                DataService.REQUEST_REASON_NORMAL, /* DataService.REQUEST_REASON_NORMAL */
+                null, /* LinkProperties */
+                1, /* pdu session id */
+                null, /* sliceInfo */
+                mMockDataServiceCallback);
+
+        verify(mMockDataServiceCallback, timeout(1000).times(1))
+                .onSetupDataCallComplete(
+                        eq(DataServiceCallback.RESULT_ERROR_ILLEGAL_STATE), isNull());
+    }
+
+    @Test
+    public void testIwlanSetupDataCallWithCellularAndCstEnabled() {
+        DataProfile dp = buildDataProfile();
+
+        /* Clear state */
+        mIwlanDataService.setNetworkConnected(
+                false, mMockNetwork, IwlanDataService.Transport.UNSPECIFIED_NETWORK);
+
+        /* Mobile is connected */
+        mIwlanDataService.setNetworkConnected(
+                true, mMockNetwork, IwlanDataService.Transport.MOBILE);
+
+        doReturn(mMockEpdgTunnelManager).when(mSpyIwlanDataServiceProvider).getTunnelManager();
+
+        lenient()
+                .when(
+                        IwlanHelper.isCrossSimCallingEnabled(
+                                eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(true);
+        lenient()
+                .when(IwlanHelper.isDefaultDataSlot(eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(false);
+
+        mSpyIwlanDataServiceProvider.setupDataCall(
+                AccessNetworkType.IWLAN, /* AccessNetworkType */
+                dp, /* dataProfile */
+                false, /* isRoaming */
+                true, /* allowRoaming */
+                DataService.REQUEST_REASON_NORMAL, /* DataService.REQUEST_REASON_NORMAL */
+                null, /* LinkProperties */
+                1, /* pduSessionId */
+                null, /* sliceInfo */
+                mMockDataServiceCallback);
+
+        /* Check bringUpTunnel() is called. */
+        verify(mMockEpdgTunnelManager, times(1))
+                .bringUpTunnel(any(TunnelSetupRequest.class), any(IwlanTunnelCallback.class));
+
+        /* Check callback result is RESULT_SUCCESS when onOpened() is called. */
+        mSpyIwlanDataServiceProvider
+                .getIwlanTunnelCallback()
+                .onOpened(TEST_APN_NAME, mMockTunnelLinkProperties);
+        verify(mMockDataServiceCallback, times(1))
+                .onSetupDataCallComplete(
+                        eq(DataServiceCallback.RESULT_SUCCESS), any(DataCallResponse.class));
     }
 }
