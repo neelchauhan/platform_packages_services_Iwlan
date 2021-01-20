@@ -707,6 +707,14 @@ public class IwlanDataService extends DataService {
 
     @VisibleForTesting
     static boolean isNetworkConnected(boolean isDds, boolean isCstEnabled) {
+        Log.d(
+                TAG,
+                "isDds: "
+                        + isDds
+                        + ", isCstEnabled: "
+                        + isCstEnabled
+                        + ", transport: "
+                        + sDefaultDataTransport);
         if (!isDds && isCstEnabled) {
             // Only Non-DDS sub with CST enabled, can use any transport.
             return sNetworkConnected;

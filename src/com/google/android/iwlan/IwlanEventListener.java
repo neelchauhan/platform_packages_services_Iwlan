@@ -19,12 +19,17 @@ package com.google.android.iwlan;
 import android.content.Context;
 import android.content.Intent;
 import android.net.wifi.WifiInfo;
+import android.database.ContentObserver;
+import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Looper;
 import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
 import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
+import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.util.SparseArray;
 
@@ -55,13 +60,21 @@ public class IwlanEventListener {
     /** Wifi calling turned off or disabled */
     public static final int WIFI_CALLING_DISABLE_EVENT = 6;
 
+    /** Cross sim calling enabled */
+    public static final int CROSS_SIM_CALLING_ENABLE_EVENT = 7;
+
+    /** Cross sim calling disabled */
+    public static final int CROSS_SIM_CALLING_DISABLE_EVENT = 8;
+
     @IntDef({
         CARRIER_CONFIG_CHANGED_EVENT,
         WIFI_DISABLE_EVENT,
         APM_DISABLE_EVENT,
         APM_ENABLE_EVENT,
         WIFI_AP_CHANGED_EVENT,
-        WIFI_CALLING_DISABLE_EVENT
+        WIFI_CALLING_DISABLE_EVENT,
+        CROSS_SIM_CALLING_ENABLE_EVENT,
+        CROSS_SIM_CALLING_DISABLE_EVENT
     })
     @interface IwlanEventType {};
 
@@ -77,8 +90,24 @@ public class IwlanEventListener {
 
     private Context mContext;
     private int mSlotId;
+    private Uri mCrossSimCallingUri;
+    private UserSettingContentObserver mUserSettingContentObserver;
+    private HandlerThread mUserSettingHandlerThread;
 
     SparseArray<Set<Handler>> eventHandlers = new SparseArray<>();
+
+    private class UserSettingContentObserver extends ContentObserver {
+        UserSettingContentObserver(Handler h) {
+            super(h);
+        }
+
+        @Override
+        public void onChange(boolean selfChange, Uri uri) {
+            if (mCrossSimCallingUri.equals(uri)) {
+                getCurrentCrossSimCallingSetting(uri);
+            }
+        }
+    }
 
     /** Returns IwlanEventListener instance */
     public static IwlanEventListener getInstance(@NonNull Context context, int slotId) {
@@ -157,10 +186,19 @@ public class IwlanEventListener {
                         intent.getIntExtra(
                                 CarrierConfigManager.EXTRA_SLOT_INDEX,
                                 SubscriptionManager.INVALID_SIM_SLOT_INDEX);
+                int carrierId =
+                        intent.getIntExtra(
+                                TelephonyManager.EXTRA_CARRIER_ID,
+                                TelephonyManager.UNKNOWN_CARRIER_ID);
+
                 Context context = IwlanDataService.getContext();
                 if (slotId != SubscriptionManager.INVALID_SIM_SLOT_INDEX && context != null) {
                     event = CARRIER_CONFIG_CHANGED_EVENT;
                     getInstance(context, slotId).updateHandlers(event);
+
+                    if (carrierId != TelephonyManager.UNKNOWN_CARRIER_ID) {
+                        getInstance(context, slotId).registerContentObserver();
+                    }
                 }
                 break;
             case Intent.ACTION_AIRPLANE_MODE_CHANGED:
@@ -255,6 +293,12 @@ public class IwlanEventListener {
             case "WIFI_CALLING_DISABLE_EVENT":
                 ret = WIFI_CALLING_DISABLE_EVENT;
                 break;
+            case "CROSS_SIM_CALLING_ENABLE_EVENT":
+                ret = CROSS_SIM_CALLING_ENABLE_EVENT;
+                break;
+            case "CROSS_SIM_CALLING_DISABLE_EVENT":
+                ret = CROSS_SIM_CALLING_DISABLE_EVENT;
+                break;
         }
         return ret;
     }
@@ -264,6 +308,44 @@ public class IwlanEventListener {
         mSlotId = slotId;
         SUB_TAG = IwlanEventListener.class.getSimpleName() + "[" + slotId + "]";
         sIsAirplaneModeOn = null;
+    }
+
+    private void registerContentObserver() {
+        // Register for content observer
+        if (mUserSettingContentObserver == null) {
+            mUserSettingHandlerThread =
+                    new HandlerThread(IwlanNetworkService.class.getSimpleName());
+            mUserSettingHandlerThread.start();
+            Looper mlooper = mUserSettingHandlerThread.getLooper();
+            Handler mhandler = new Handler(mlooper);
+            mUserSettingContentObserver = new UserSettingContentObserver(mhandler);
+
+            mCrossSimCallingUri =
+                    Uri.withAppendedPath(
+                            SubscriptionManager.CROSS_SIM_ENABLED_CONTENT_URI,
+                            String.valueOf(IwlanHelper.getSubId(mContext, mSlotId)));
+            mContext.getContentResolver()
+                    .registerContentObserver(
+                            mCrossSimCallingUri, true, mUserSettingContentObserver);
+        }
+        // Update current Cross Sim Calling setting
+        getCurrentCrossSimCallingSetting(mCrossSimCallingUri);
+    }
+
+    public void getCurrentCrossSimCallingSetting(Uri uri) {
+        String uriString = uri.getPath();
+        int subIndex = Integer.parseInt(uriString.substring(uriString.lastIndexOf('/') + 1));
+        int slotIndex = SubscriptionManager.getSlotIndex(subIndex);
+
+        if (slotIndex == SubscriptionManager.INVALID_SIM_SLOT_INDEX) {
+            Log.e(LOG_TAG, "Invalid slot index: " + slotIndex);
+            return;
+        }
+
+        boolean isCstEnabled = IwlanHelper.isCrossSimCallingEnabled(mContext, slotIndex);
+        int event =
+                (isCstEnabled) ? CROSS_SIM_CALLING_ENABLE_EVENT : CROSS_SIM_CALLING_DISABLE_EVENT;
+        getInstance(mContext, slotIndex).updateHandlers(event);
     }
 
     private synchronized void updateHandlers(int event) {

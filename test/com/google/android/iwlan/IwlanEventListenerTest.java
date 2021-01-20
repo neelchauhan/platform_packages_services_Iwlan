@@ -22,10 +22,13 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 import android.content.Context;
+import android.net.Uri;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Handler;
 import android.os.Message;
+import android.telephony.SubscriptionInfo;
+import android.telephony.SubscriptionManager;
 
 import org.junit.After;
 import org.junit.Before;
@@ -44,10 +47,14 @@ public class IwlanEventListenerTest {
     @Mock private Message mMockMessage;
     @Mock private WifiManager mMockWifiManager;
     @Mock private WifiInfo mMockWifiInfo;
+    @Mock private SubscriptionManager mMockSubscriptionManager;
+    @Mock private SubscriptionInfo mMockSubscriptionInfo;
 
     private static final int DEFAULT_SLOT_INDEX = 0;
     private static final String WIFI_SSID_1 = "TEST_AP_NAME_1";
     private static final String WIFI_SSID_2 = "TEST_AP_NAME_2";
+    private static final Uri CROSS_SIM_URI =
+            Uri.parse("content://telephony/siminfo/cross_sim_calling_enabled/2");
     private IwlanEventListener mIwlanEventListener;
     private List<Integer> events;
 
@@ -57,11 +64,22 @@ public class IwlanEventListenerTest {
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
 
-        mStaticMockSession = mockitoSession().startMocking();
+        mStaticMockSession =
+                mockitoSession()
+                        .mockStatic(IwlanHelper.class)
+                        .mockStatic(SubscriptionManager.class)
+                        .startMocking();
 
         when(mMockContext.getSystemService(eq(WifiManager.class))).thenReturn(mMockWifiManager);
 
         when(mMockWifiManager.getConnectionInfo()).thenReturn(mMockWifiInfo);
+
+        when(mMockContext.getSystemService(eq(SubscriptionManager.class)))
+                .thenReturn(mMockSubscriptionManager);
+
+        when(mMockSubscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(
+                        eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(mMockSubscriptionInfo);
 
         mIwlanEventListener = IwlanEventListener.getInstance(mMockContext, DEFAULT_SLOT_INDEX);
     }
@@ -87,6 +105,46 @@ public class IwlanEventListenerTest {
 
         when(mMockWifiInfo.getSSID()).thenReturn(WIFI_SSID_2);
         mIwlanEventListener.onWifiConnected(mMockContext);
+        verify(mMockMessage, times(1)).sendToTarget();
+    }
+
+    @Test
+    public void testCrossSimCallingSettingEnableChanged() throws Exception {
+        when(mMockHandler.obtainMessage(eq(IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT)))
+                .thenReturn(mMockMessage);
+
+        events = new ArrayList<Integer>();
+        events.add(IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT);
+        mIwlanEventListener.addEventListener(events, mMockHandler);
+
+        lenient()
+                .when(
+                        IwlanHelper.isCrossSimCallingEnabled(
+                                eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(true);
+
+        // Trigger CROSS_SIM_CALLING_ENABLE_EVENT when cross sim calling setting is enabled
+        mIwlanEventListener.getCurrentCrossSimCallingSetting(CROSS_SIM_URI);
+        verify(mMockMessage, times(1)).sendToTarget();
+    }
+
+    @Test
+    public void testCrossSimCallingSettingDisableChanged() throws Exception {
+        when(mMockHandler.obtainMessage(eq(IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT)))
+                .thenReturn(mMockMessage);
+
+        events = new ArrayList<Integer>();
+        events.add(IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT);
+        mIwlanEventListener.addEventListener(events, mMockHandler);
+
+        lenient()
+                .when(
+                        IwlanHelper.isCrossSimCallingEnabled(
+                                eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
+                .thenReturn(false);
+
+        // Trigger CROSS_SIM_CALLING_DISABLE_EVENT when cross sim calling setting is disabled
+        mIwlanEventListener.getCurrentCrossSimCallingSetting(CROSS_SIM_URI);
         verify(mMockMessage, times(1)).sendToTarget();
     }
 }
