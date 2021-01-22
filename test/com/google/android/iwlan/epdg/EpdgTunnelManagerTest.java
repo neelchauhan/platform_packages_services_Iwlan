@@ -39,8 +39,8 @@ import android.net.ipsec.ike.exceptions.IkeException;
 import android.net.ipsec.ike.exceptions.IkeInternalException;
 import android.net.ipsec.ike.exceptions.InvalidIkeSpiException;
 import android.net.ipsec.ike.ike3gpp.Ike3gppBackoffTimer;
-import android.net.ipsec.ike.ike3gpp.Ike3gppExtension;
 import android.net.ipsec.ike.ike3gpp.Ike3gppData;
+import android.net.ipsec.ike.ike3gpp.Ike3gppExtension;
 import android.os.Looper;
 import android.os.PersistableBundle;
 import android.telephony.CarrierConfigManager;
@@ -268,7 +268,7 @@ public class EpdgTunnelManagerTest {
     }
 
     @Test
-    public void testSetRekeyTimerFromCarrierConfig() throws Exception {
+    public void testRekeyAndNattTimerFromCarrierConfig() throws Exception {
         String testApnName = "www.xyz.com";
 
         // Test values
@@ -276,6 +276,7 @@ public class EpdgTunnelManagerTest {
         int softTime = 20000;
         int hardTimeChild = 10000;
         int softTimeChild = 1000;
+        int nattTimer = 60;
 
         PersistableBundle bundle = new PersistableBundle();
         bundle.putInt(CarrierConfigManager.Iwlan.KEY_IKE_REKEY_HARD_TIMER_SEC_INT, hardTime);
@@ -284,6 +285,7 @@ public class EpdgTunnelManagerTest {
                 CarrierConfigManager.Iwlan.KEY_CHILD_SA_REKEY_HARD_TIMER_SEC_INT, hardTimeChild);
         bundle.putInt(
                 CarrierConfigManager.Iwlan.KEY_CHILD_SA_REKEY_SOFT_TIMER_SEC_INT, softTimeChild);
+        bundle.putInt(CarrierConfigManager.Iwlan.KEY_NATT_KEEP_ALIVE_TIMER_SEC_INT, nattTimer);
 
         setupMockForGetConfig(bundle);
 
@@ -337,6 +339,7 @@ public class EpdgTunnelManagerTest {
         assertEquals(ikeSessionParams.getSoftLifetimeSeconds(), softTime);
         assertEquals(childSessionParams.getHardLifetimeSeconds(), hardTimeChild);
         assertEquals(childSessionParams.getSoftLifetimeSeconds(), softTimeChild);
+        assertEquals(ikeSessionParams.getNattKeepAliveDelaySeconds(), nattTimer);
     }
 
     @Test
@@ -1138,5 +1141,62 @@ public class EpdgTunnelManagerTest {
                     ikeSessionParams.getIke3gppExtension().getIke3gppParams().getPduSessionId();
             assertEquals(pduSessionIdByte, PDU_SESSION_ID_BYTE);
         }
+    }
+
+    @Test
+    public void testInvalidNattTimerFromCarrierConfig() throws Exception {
+        String testApnName = "www.xyz.com";
+
+        int nattTimer = 4500; // valid range for natt timer is 0-3600
+        int ikeDefaultNattTimerValue = 20; // default value for natt timer is 20 secs
+
+        PersistableBundle bundle = new PersistableBundle();
+        bundle.putInt(CarrierConfigManager.Iwlan.KEY_NATT_KEEP_ALIVE_TIMER_SEC_INT, nattTimer);
+
+        setupMockForGetConfig(bundle);
+        when(mMockEpdgSelector.getValidatedServerList(
+                        anyInt(),
+                        eq(false),
+                        eq(false),
+                        eq(mMockNetwork),
+                        any(EpdgSelector.EpdgSelectorCallback.class)))
+                .thenReturn(new IwlanError(IwlanError.NO_ERROR));
+
+        doReturn(null)
+                .when(mMockIkeSessionCreator)
+                .createIkeSession(
+                        eq(mMockContext),
+                        any(IkeSessionParams.class),
+                        any(ChildSessionParams.class),
+                        any(Executor.class),
+                        any(IkeSessionCallback.class),
+                        any(ChildSessionCallback.class));
+        doReturn(true).when(mEpdgTunnelManager).canBringUpTunnel(eq(testApnName));
+
+        boolean ret =
+                mEpdgTunnelManager.bringUpTunnel(
+                        getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
+                        mMockIwlanTunnelCallback);
+        assertTrue(ret);
+
+        ArrayList<InetAddress> ipList = new ArrayList<>();
+        ipList.add(InetAddress.getByName(TEST_IP_ADDRESS));
+        mEpdgTunnelManager.sendSelectionRequestComplete(
+                ipList, new IwlanError(IwlanError.NO_ERROR));
+
+        ArgumentCaptor<IkeSessionParams> ikeSessionParamsCaptor =
+                ArgumentCaptor.forClass(IkeSessionParams.class);
+
+        verify(mMockIkeSessionCreator)
+                .createIkeSession(
+                        eq(mMockContext),
+                        ikeSessionParamsCaptor.capture(),
+                        any(ChildSessionParams.class),
+                        any(Executor.class),
+                        any(IkeSessionCallback.class),
+                        any(ChildSessionCallback.class));
+
+        IkeSessionParams ikeSessionParams = ikeSessionParamsCaptor.getValue();
+        assertEquals(ikeSessionParams.getNattKeepAliveDelaySeconds(), ikeDefaultNattTimerValue);
     }
 }
