@@ -803,7 +803,21 @@ public class ErrorPolicyManager {
 
             boolean ret = false;
             for (String errorDetail : mErrorDetails) {
-                if (errorDetail.equals(iwlanErrorDetail) || errorDetail.equals("*")) {
+                if (mErrorType == IKE_PROTOCOL_ERROR_TYPE
+                        && iwlanError.getErrorType() == IwlanError.IKE_PROTOCOL_EXCEPTION
+                        && errorDetail.contains("-")) {
+                    // error detail is stored in range format.
+                    // ErrorPolicyManager#verifyIkeProtocolErrorDetail will make sure that
+                    // this is stored correctly in "min-max" format.
+                    String range[] = errorDetail.split("-");
+                    int min = Integer.parseInt(range[0]);
+                    int max = Integer.parseInt(range[1]);
+                    int error = Integer.parseInt(iwlanErrorDetail);
+                    if (error >= min && error <= max) {
+                        ret = true;
+                        break;
+                    }
+                } else if (errorDetail.equals(iwlanErrorDetail) || errorDetail.equals("*")) {
                     ret = true;
                     break;
                 }

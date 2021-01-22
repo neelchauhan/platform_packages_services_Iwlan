@@ -101,7 +101,7 @@ public class ErrorPolicyManagerTest {
                         + "\"ErrorTypes\": [{"
                         + getErrorTypeInJSON(
                                 "IKE_PROTOCOL_ERROR_TYPE",
-                                new String[] {"24", "34"},
+                                new String[] {"24", "34", "9000-9050"},
                                 new String[] {"4", "8", "16"},
                                 new String[] {"APM_ENABLE_EVENT", "WIFI_AP_CHANGED_EVENT"})
                         + "}, {"
@@ -126,6 +126,18 @@ public class ErrorPolicyManagerTest {
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4,8,16
         IwlanError iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
         long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(4, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(8, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(16, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(86400, time);
+
+        // Validate the range error detail.
+        iwlanError =
+                new IwlanError(new UnrecognizedIkeProtocolException(9030, new byte[] {0x00, 0x01}));
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(4, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(8, time);
