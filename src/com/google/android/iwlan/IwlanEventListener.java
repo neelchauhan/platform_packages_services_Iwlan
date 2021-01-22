@@ -18,6 +18,7 @@ package com.google.android.iwlan;
 
 import android.content.Context;
 import android.content.Intent;
+import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Handler;
 import android.support.annotation.IntDef;
@@ -64,9 +65,13 @@ public class IwlanEventListener {
     })
     @interface IwlanEventType {};
 
-    private final String LOG_TAG;
+    private static String LOG_TAG = IwlanEventListener.class.getSimpleName();
+
+    private final String SUB_TAG;
 
     private static Boolean sIsAirplaneModeOn;
+
+    private static String sWifiSSID = new String();
 
     private static Map<Integer, IwlanEventListener> mInstances = new ConcurrentHashMap<>();
 
@@ -187,6 +192,43 @@ public class IwlanEventListener {
     }
 
     /**
+     * Broadcast WIFI_AP_CHANGED_EVENT if Wifi SSID changed after Wifi connected.
+     *
+     * @param Context context
+     */
+    public static void onWifiConnected(Context context) {
+        WifiManager wifiManager = context.getSystemService(WifiManager.class);
+        if (wifiManager == null) {
+            Log.e(LOG_TAG, "Could not find wifiManager");
+            return;
+        }
+        WifiInfo wifiInfo = wifiManager.getConnectionInfo();
+        if (wifiInfo == null) {
+            Log.e(LOG_TAG, "wifiInfo is null");
+            return;
+        }
+        String wifiSSID = wifiInfo.getSSID();
+        if (wifiSSID.equals(WifiManager.UNKNOWN_SSID)) {
+            Log.e(LOG_TAG, "Could not get Wifi SSID");
+            return;
+        }
+
+        // Check sWifiSSID is greater than 0 to avoid trigger event after device first camps on
+        // Wifi.
+        if (sWifiSSID.length() > 0 && !sWifiSSID.equals(wifiSSID)) {
+            Log.d(LOG_TAG, "Wifi SSID changed");
+            int event = WIFI_AP_CHANGED_EVENT;
+            for (Map.Entry<Integer, IwlanEventListener> entry : mInstances.entrySet()) {
+                IwlanEventListener instance = entry.getValue();
+                if (instance != null) {
+                    instance.updateHandlers(event);
+                }
+            }
+        }
+        sWifiSSID = wifiSSID;
+    }
+
+    /**
      * Returns the Event id of the String. String that matches the name of the event
      *
      * @param event String form of the event.
@@ -220,13 +262,13 @@ public class IwlanEventListener {
     private IwlanEventListener(Context context, int slotId) {
         mContext = context;
         mSlotId = slotId;
-        LOG_TAG = IwlanEventListener.class.getSimpleName() + "[" + slotId + "]";
+        SUB_TAG = IwlanEventListener.class.getSimpleName() + "[" + slotId + "]";
         sIsAirplaneModeOn = null;
     }
 
     private synchronized void updateHandlers(int event) {
         if (eventHandlers.contains(event)) {
-            Log.d(LOG_TAG, "Updating handlers for the event: " + event);
+            Log.d(SUB_TAG, "Updating handlers for the event: " + event);
             for (Handler handler : eventHandlers.get(event)) {
                 handler.obtainMessage(event).sendToTarget();
             }
