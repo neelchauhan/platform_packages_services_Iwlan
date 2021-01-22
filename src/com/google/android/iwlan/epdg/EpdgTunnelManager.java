@@ -1015,7 +1015,9 @@ public class EpdgTunnelManager {
         // INVALID_SYNTAX, INVALID_MESSAGE_ID, INVALID_SPI, NO_PROPOSAL_CHOSEN,
         // SINGLE_PAIR_REQUIRED, NO_ADDITIONAL_SAS, INTERNAL_ADDRESS_FAILURE
         // TS_UNACCEPTABLE, INVALID_SELECTORS, TEMPORARY_FAILURE, CHILD_SA_NOT_FOUND
-
+        if (error.getException() instanceof IkeProtocolException) {
+            return false;
+        }
         return true;
     }
 
