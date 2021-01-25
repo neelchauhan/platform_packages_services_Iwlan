@@ -898,29 +898,37 @@ public class EpdgTunnelManager {
                         CarrierConfigManager.Iwlan
                                 .KEY_SUPPORTED_CHILD_SESSION_ENCRYPTION_ALGORITHMS_INT_ARRAY);
         for (int encryptionAlgo : encryptionAlgos) {
-            validateConfig(encryptionAlgo, VALID_ENCRYPTION_ALGOS, CONFIG_TYPE_ENCRYPT_ALGO);
-
-            if (encryptionAlgo == CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CBC) {
-                int[] aesCbcKeyLens =
-                        getConfig(
-                                CarrierConfigManager.Iwlan
-                                        .KEY_CHILD_SESSION_AES_CBC_KEY_SIZE_INT_ARRAY);
-                for (int aesCbcKeyLen : aesCbcKeyLens) {
-                    if (validateConfig(aesCbcKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
-                        saProposalBuilder.addEncryptionAlgorithm(encryptionAlgo, aesCbcKeyLen);
+            if (validateConfig(encryptionAlgo, VALID_ENCRYPTION_ALGOS, CONFIG_TYPE_ENCRYPT_ALGO)) {
+                if (ChildSaProposal.getSupportedEncryptionAlgorithms().contains(encryptionAlgo)) {
+                    if (encryptionAlgo == CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CBC) {
+                        int[] aesCbcKeyLens =
+                                getConfig(
+                                        CarrierConfigManager.Iwlan
+                                                .KEY_CHILD_SESSION_AES_CBC_KEY_SIZE_INT_ARRAY);
+                        for (int aesCbcKeyLen : aesCbcKeyLens) {
+                            if (validateConfig(
+                                    aesCbcKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
+                                saProposalBuilder.addEncryptionAlgorithm(
+                                        encryptionAlgo, aesCbcKeyLen);
+                            }
+                        }
                     }
-                }
-            }
 
-            if (encryptionAlgo == CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CTR) {
-                int[] aesCtrKeyLens =
-                        getConfig(
-                                CarrierConfigManager.Iwlan
-                                        .KEY_CHILD_SESSION_AES_CTR_KEY_SIZE_INT_ARRAY);
-                for (int aesCtrKeyLen : aesCtrKeyLens) {
-                    if (validateConfig(aesCtrKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
-                        saProposalBuilder.addEncryptionAlgorithm(encryptionAlgo, aesCtrKeyLen);
+                    if (encryptionAlgo == CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CTR) {
+                        int[] aesCtrKeyLens =
+                                getConfig(
+                                        CarrierConfigManager.Iwlan
+                                                .KEY_CHILD_SESSION_AES_CTR_KEY_SIZE_INT_ARRAY);
+                        for (int aesCtrKeyLen : aesCtrKeyLens) {
+                            if (validateConfig(
+                                    aesCtrKeyLen, VALID_KEY_LENGTHS, CONFIG_TYPE_KEY_LEN)) {
+                                saProposalBuilder.addEncryptionAlgorithm(
+                                        encryptionAlgo, aesCtrKeyLen);
+                            }
+                        }
                     }
+                } else {
+                    Log.w(TAG, "Device does not support encryption alog:  " + encryptionAlgo);
                 }
             }
         }
@@ -929,7 +937,11 @@ public class EpdgTunnelManager {
                 getConfig(CarrierConfigManager.Iwlan.KEY_SUPPORTED_INTEGRITY_ALGORITHMS_INT_ARRAY);
         for (int integrityAlgo : integrityAlgos) {
             if (validateConfig(integrityAlgo, VALID_INTEGRITY_ALGOS, CONFIG_TYPE_INTEGRITY_ALGO)) {
-                saProposalBuilder.addIntegrityAlgorithm(integrityAlgo);
+                if (ChildSaProposal.getSupportedIntegrityAlgorithms().contains(integrityAlgo)) {
+                    saProposalBuilder.addIntegrityAlgorithm(integrityAlgo);
+                } else {
+                    Log.w(TAG, "Device does not support integrity alog:  " + integrityAlgo);
+                }
             }
         }
 
