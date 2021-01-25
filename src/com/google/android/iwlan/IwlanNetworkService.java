@@ -26,6 +26,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.Message;
 import android.telephony.AccessNetworkConstants;
 import android.telephony.NetworkRegistrationInfo;
 import android.telephony.NetworkService;
@@ -155,6 +156,45 @@ public class IwlanNetworkService extends NetworkService {
         private final IwlanNetworkService mIwlanNetworkService;
         private final String SUB_TAG;
         private boolean mIsSubActive = false;
+        private HandlerThread mHandlerThread;
+        private Handler mHandler;
+
+        private final class NSPHandler extends Handler {
+            private final String TAG =
+                    IwlanNetworkService.class.getSimpleName()
+                            + NSPHandler.class.getSimpleName()
+                            + "["
+                            + getSlotIndex()
+                            + "]";
+
+            @Override
+            public void handleMessage(Message msg) {
+                Log.d(TAG, "msg.what = " + msg.what);
+                switch (msg.what) {
+                    case IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT:
+                        Log.d(TAG, "CROSS_SIM_CALLING_ENABLE_EVENT");
+                        notifyNetworkRegistrationInfoChanged();
+                        break;
+                    case IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT:
+                        Log.d(TAG, "CROSS_SIM_CALLING_DISABLE_EVENT");
+                        notifyNetworkRegistrationInfoChanged();
+                        break;
+                    default:
+                        Log.d(TAG, "Unknown message received!");
+                        break;
+                }
+            }
+
+            NSPHandler(Looper looper) {
+                super(looper);
+            }
+        }
+
+        Looper getLooper() {
+            mHandlerThread = new HandlerThread("NSPHandlerThread");
+            mHandlerThread.start();
+            return mHandlerThread.getLooper();
+        }
 
         /**
          * Constructor
@@ -165,6 +205,17 @@ public class IwlanNetworkService extends NetworkService {
             super(slotIndex);
             SUB_TAG = TAG + "[" + slotIndex + "]";
             mIwlanNetworkService = iwlanNetworkService;
+
+            // Register IwlanEventListener
+            initHandler();
+            List<Integer> events = new ArrayList<Integer>();
+            events.add(IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT);
+            events.add(IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT);
+            IwlanEventListener.getInstance(mContext, slotIndex).addEventListener(events, mHandler);
+        }
+
+        void initHandler() {
+            mHandler = new NSPHandler(getLooper());
         }
 
         @Override
@@ -186,6 +237,7 @@ public class IwlanNetworkService extends NetworkService {
                     .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WLAN)
                     .setEmergencyOnly(!mIsSubActive)
                     .setDomain(NetworkRegistrationInfo.DOMAIN_PS);
+
             if (!IwlanNetworkService.isNetworkConnected(
                     IwlanHelper.isDefaultDataSlot(mContext, getSlotIndex()),
                     IwlanHelper.isCrossSimCallingEnabled(mContext, getSlotIndex()))) {
@@ -209,6 +261,8 @@ public class IwlanNetworkService extends NetworkService {
         @Override
         public void close() {
             mIwlanNetworkService.removeNetworkServiceProvider(this);
+            IwlanEventListener.getInstance(mContext, getSlotIndex()).removeEventListener(mHandler);
+            mHandlerThread.quit();
         }
 
         @VisibleForTesting
