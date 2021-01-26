@@ -44,6 +44,7 @@
          <intent-filter>
             <action android:name="android.telephony.action.CARRIER_CONFIG_CHANGED"/>
             <action android:name="android.telephony.action.CARRIER_SIGNAL_PCO_VALUE"/>
+            <action android:name="android.intent.action.AIRPLANE_MODE" />
          </intent-filter>
     </receiver>
       <uses-library android:name="android.net.ipsec.ike" />
