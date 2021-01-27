@@ -1220,7 +1220,7 @@ public class EpdgTunnelManager {
                                     ipSecManager.createIpSecTunnelInterface(
                                             localAddress, mEpdgAddress, mNetwork));
                         } catch (IpSecManager.ResourceUnavailableException | IOException e) {
-                            Log.e(TAG, "Failed to create tunnel interface.");
+                            Log.e(TAG, "Failed to create tunnel interface. " + e);
                             closeIkeSession(
                                     apnName, new IwlanError(IwlanError.TUNNEL_TRANSFORM_FAILED));
                             return;
