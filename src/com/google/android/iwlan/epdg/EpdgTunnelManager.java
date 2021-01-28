@@ -1118,6 +1118,10 @@ public class EpdgTunnelManager {
                     tunnelConfig = mApnNameToTunnelConfig.get(apnName);
                     mApnNameToTunnelConfig.remove(apnName);
                     IwlanError iwlanError = tunnelConfig.getError();
+                    IpSecManager.IpSecTunnelInterface iface = tunnelConfig.getIface();
+                    if (iface != null) {
+                        iface.close();
+                    }
 
                     if (!mIsEpdgAddressSelected) {
                         // Retry only if it is an IKE_INTERNAL_IO_EXCEPTION
