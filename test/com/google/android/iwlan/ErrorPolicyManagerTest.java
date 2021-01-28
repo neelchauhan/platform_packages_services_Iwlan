@@ -25,6 +25,7 @@ import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.AssetManager;
 import android.net.ipsec.ike.exceptions.AuthenticationFailedException;
@@ -63,6 +64,7 @@ public class ErrorPolicyManagerTest {
     @Mock SubscriptionManager mMockSubscriptionManager;
     @Mock SubscriptionInfo mMockSubscriptionInfo;
     @Mock DataService.DataServiceProvider mMockDataServiceProvider;
+    @Mock private ContentResolver mMockContentResolver;
     MockitoSession mStaticMockSession;
 
     @Before
@@ -623,5 +625,6 @@ public class ErrorPolicyManagerTest {
                 .getActiveSubscriptionInfoForSimSlotIndex(DEFAULT_SLOT_INDEX);
         doReturn(DEFAULT_SUBID).when(mockSubInfo).getSubscriptionId();
         doReturn(bundle).when(mMockCarrierConfigManager).getConfigForSubId(DEFAULT_SLOT_INDEX);
+        when(mMockContext.getContentResolver()).thenReturn(mMockContentResolver);
     }
 }
