@@ -19,6 +19,7 @@ package com.google.android.iwlan;
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.LinkAddress;
+import android.net.LinkProperties;
 import android.net.Network;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
@@ -102,15 +103,18 @@ public class IwlanHelper {
         ConnectivityManager connectivityManager =
                 context.getSystemService(ConnectivityManager.class);
         List<InetAddress> gatewayList = new ArrayList<InetAddress>();
-        for (LinkAddress laddr :
-                connectivityManager.getLinkProperties(network).getLinkAddresses()) {
-            InetAddress inetaddr = laddr.getAddress();
-            // skip linklocal and loopback addresses
-            if (!inetaddr.isLoopbackAddress() && !inetaddr.isLinkLocalAddress()) {
-                gatewayList.add(inetaddr);
+        if (network != null) {
+            LinkProperties linkProperties = connectivityManager.getLinkProperties(network);
+            if (linkProperties != null) {
+                for (LinkAddress laddr : linkProperties.getLinkAddresses()) {
+                    InetAddress inetaddr = laddr.getAddress();
+                    // skip linklocal and loopback addresses
+                    if (!inetaddr.isLoopbackAddress() && !inetaddr.isLinkLocalAddress()) {
+                        gatewayList.add(inetaddr);
+                    }
+                }
             }
         }
-
         return gatewayList;
     }
 
