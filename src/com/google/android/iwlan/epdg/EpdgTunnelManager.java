@@ -1012,25 +1012,18 @@ public class EpdgTunnelManager {
     }
 
     private boolean shouldTryNextServerForError(IwlanError error) {
-        // TODO: we should do policy based configuration so this can be controlled.
-        // There are errors which are generic (like authentication or apn not allowed
-        // When these occur, it won't help trying the next epdg server
-        // For other errors (epdg specific), ex: server not responding, traffic selector issues
-        // we should try the next epdg server
-
-        // TODO: double check if this is sent for internal timeout
-        // and retry  for server timeouts. b/176539488
-
-        // As a first step, these would most likely be local epdg errors
-        // and trying the next server may help
-        // UNSUPPORTED_CRITICAL_PAYLOAD, INVALID_IKE_SPI, INVALID_MAJOR_VERSION
-        // INVALID_SYNTAX, INVALID_MESSAGE_ID, INVALID_SPI, NO_PROPOSAL_CHOSEN,
-        // SINGLE_PAIR_REQUIRED, NO_ADDITIONAL_SAS, INTERNAL_ADDRESS_FAILURE
-        // TS_UNACCEPTABLE, INVALID_SELECTORS, TEMPORARY_FAILURE, CHILD_SA_NOT_FOUND
-        if (error.getException() instanceof IkeProtocolException) {
-            return false;
+        // Retry only for server timeout errors.
+        if (error.getErrorType() == IwlanError.IKE_INTERNAL_IO_EXCEPTION) {
+            if (error.getException().getCause() != null) {
+                String message = error.getException().getCause().getMessage();
+                if (message != null
+                        && (message.equals("Retransmitting IKE INIT request failure")
+                        || message.equals("Retransmitting failure"))) {
+                    return true;
+                }
+            }
         }
-        return true;
+        return false;
     }
 
     private final class TmHandler extends Handler {
