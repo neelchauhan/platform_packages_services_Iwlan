@@ -90,8 +90,7 @@ public class IwlanDataService extends DataService {
         /** Called when the framework connects and has declared a new network ready for use. */
         @Override
         public void onAvailable(Network network) {
-            Log.d(TAG, "onAvailable: " + (getTransport(network)).name());
-            IwlanDataService.setNetworkConnected(true, network, getTransport(network));
+            Log.d(TAG, "onAvailable: " + network);
         }
 
         /**
@@ -103,12 +102,7 @@ public class IwlanDataService extends DataService {
          */
         @Override
         public void onLosing(Network network, int maxMsToLive) {
-            Log.d(
-                    TAG,
-                    "onLosing: maxMsToLive: "
-                            + maxMsToLive
-                            + " network:"
-                            + (getTransport(network)).name());
+            Log.d(TAG, "onLosing: maxMsToLive: " + maxMsToLive + " network: " + network);
         }
 
         /**
@@ -117,47 +111,39 @@ public class IwlanDataService extends DataService {
          */
         @Override
         public void onLost(Network network) {
-            Log.d(TAG, "onLost: " + (getTransport(network)).name());
+            Log.d(TAG, "onLost: " + network);
             IwlanDataService.setNetworkConnected(false, network, Transport.UNSPECIFIED_NETWORK);
         }
 
         /** Called when the network corresponding to this request changes {@link LinkProperties}. */
         @Override
         public void onLinkPropertiesChanged(Network network, LinkProperties linkProperties) {
-            Log.d(
-                    TAG,
-                    "onLinkPropertiesChanged: "
-                            + (getTransport(network)).name()
-                            + " linkprops:"
-                            + linkProperties);
-            IwlanDataService.setNetworkConnected(true, network, getTransport(network));
+            Log.d(TAG, "onLinkPropertiesChanged: " + linkProperties);
         }
 
         /** Called when access to the specified network is blocked or unblocked. */
         @Override
         public void onBlockedStatusChanged(Network network, boolean blocked) {
             // TODO: check if we need to handle this
-            Log.d(
-                    TAG,
-                    "onBlockedStatusChanged: "
-                            + (getTransport(network)).name()
-                            + " BLOCKED:"
-                            + blocked);
+            Log.d(TAG, "onBlockedStatusChanged: " + network + " BLOCKED:" + blocked);
         }
-    }
 
-    private static Transport getTransport(Network network) {
-        ConnectivityManager connectivityManager =
-                mContext.getSystemService(ConnectivityManager.class);
-        NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(network);
-        if (capabilities != null) {
-            if (capabilities.hasTransport(TRANSPORT_CELLULAR)) {
-                return Transport.MOBILE;
-            } else if (capabilities.hasTransport(TRANSPORT_WIFI)) {
-                return Transport.WIFI;
+        @Override
+        public void onCapabilitiesChanged(
+                Network network, NetworkCapabilities networkCapabilities) {
+            // onCapabilitiesChanged is guaranteed to be called immediately after onAvailable per
+            // API
+            Log.d(TAG, "onCapabilitiesChanged: " + network);
+            if (networkCapabilities != null) {
+                if (networkCapabilities.hasTransport(TRANSPORT_CELLULAR)) {
+                    IwlanDataService.setNetworkConnected(true, network, Transport.MOBILE);
+                } else if (networkCapabilities.hasTransport(TRANSPORT_WIFI)) {
+                    IwlanDataService.setNetworkConnected(true, network, Transport.WIFI);
+                } else {
+                    Log.w(TAG, "Network does not have cellular or wifi capability");
+                }
             }
         }
-        return Transport.UNSPECIFIED_NETWORK;
     }
 
     @VisibleForTesting
@@ -843,8 +829,11 @@ public class IwlanDataService extends DataService {
         sNetwork = network;
 
         if (networkConnected) {
+            if (transport == Transport.UNSPECIFIED_NETWORK) {
+                // just return since we do not know the transport yet
+                return;
+            }
             if (sDefaultDataTransport != Transport.UNSPECIFIED_NETWORK
-                    && transport != Transport.UNSPECIFIED_NETWORK
                     && transport != sDefaultDataTransport) {
                 Log.d(
                         TAG,
