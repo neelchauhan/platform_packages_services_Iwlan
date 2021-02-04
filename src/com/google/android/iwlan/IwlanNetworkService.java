@@ -16,6 +16,9 @@
 
 package com.google.android.iwlan;
 
+import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
+import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
+
 import android.content.Context;
 import android.content.Intent;
 import android.net.ConnectivityManager;
@@ -36,9 +39,6 @@ import android.telephony.TelephonyManager;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
-
-import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
-import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -67,8 +67,7 @@ public class IwlanNetworkService extends NetworkService {
         /** Called when the framework connects and has declared a new network ready for use. */
         @Override
         public void onAvailable(Network network) {
-            Log.d(TAG, "onAvailable: " + (getTransport(network)).name());
-            IwlanNetworkService.setNetworkConnected(true, getTransport(network));
+            Log.d(TAG, "onAvailable: " + network);
         }
 
         /**
@@ -80,12 +79,7 @@ public class IwlanNetworkService extends NetworkService {
          */
         @Override
         public void onLosing(Network network, int maxMsToLive) {
-            Log.d(
-                    TAG,
-                    "onLosing: maxMsToLive: "
-                            + maxMsToLive
-                            + " network:"
-                            + (getTransport(network)).name());
+            Log.d(TAG, "onLosing: maxMsToLive: " + maxMsToLive + " network: " + network);
         }
 
         /**
@@ -94,47 +88,41 @@ public class IwlanNetworkService extends NetworkService {
          */
         @Override
         public void onLost(Network network) {
-            Log.d(TAG, "onLost: " + (getTransport(network)).name());
+            Log.d(TAG, "onLost: " + network);
             IwlanNetworkService.setNetworkConnected(false, Transport.UNSPECIFIED_NETWORK);
         }
 
         /** Called when the network corresponding to this request changes {@link LinkProperties}. */
         @Override
         public void onLinkPropertiesChanged(Network network, LinkProperties linkProperties) {
-            Log.d(
-                    TAG,
-                    "onLinkPropertiesChanged: "
-                            + (getTransport(network)).name()
-                            + " linkprops:"
-                            + linkProperties);
-            IwlanNetworkService.setNetworkConnected(true, getTransport(network));
+            Log.d(TAG, "onLinkPropertiesChanged: " + linkProperties);
         }
 
         /** Called when access to the specified network is blocked or unblocked. */
         @Override
         public void onBlockedStatusChanged(Network network, boolean blocked) {
             // TODO: check if we need to handle this
-            Log.d(
-                    TAG,
-                    "onBlockedStatusChanged: "
-                            + (getTransport(network)).name()
-                            + " BLOCKED:"
-                            + blocked);
+            Log.d(TAG, "onBlockedStatusChanged: " + " BLOCKED:" + blocked);
         }
-    }
 
-    private Transport getTransport(Network network) {
-        ConnectivityManager connectivityManager =
-                mContext.getSystemService(ConnectivityManager.class);
-        NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(network);
-        if (capabilities != null) {
-            if (capabilities.hasTransport(TRANSPORT_CELLULAR)) {
-                return Transport.MOBILE;
-            } else if (capabilities.hasTransport(TRANSPORT_WIFI)) {
-                return Transport.WIFI;
+        @Override
+        public void onCapabilitiesChanged(
+                Network network, NetworkCapabilities networkCapabilities) {
+            // onCapabilitiesChanged is guaranteed to be called immediately after onAvailable per
+            // API
+            Log.d(TAG, "onCapabilitiesChanged: " + network);
+            if (networkCapabilities != null) {
+                if (networkCapabilities.hasTransport(TRANSPORT_CELLULAR)) {
+                    IwlanDataService.setNetworkConnected(
+                            true, network, IwlanDataService.Transport.MOBILE);
+                } else if (networkCapabilities.hasTransport(TRANSPORT_WIFI)) {
+                    IwlanDataService.setNetworkConnected(
+                            true, network, IwlanDataService.Transport.WIFI);
+                } else {
+                    Log.w(TAG, "Network does not have cellular or wifi capability");
+                }
             }
         }
-        return Transport.UNSPECIFIED_NETWORK;
     }
 
     final class IwlanOnSubscriptionsChangedListener
@@ -341,6 +329,9 @@ public class IwlanNetworkService extends NetworkService {
 
     public static void setNetworkConnected(boolean connected, Transport transport) {
         if (connected == sNetworkConnected && transport == sDefaultDataTransport) {
+            return;
+        }
+        if (connected && (transport == IwlanNetworkService.Transport.UNSPECIFIED_NETWORK)) {
             return;
         }
         sNetworkConnected = connected;
