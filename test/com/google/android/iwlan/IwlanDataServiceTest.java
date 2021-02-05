@@ -319,6 +319,8 @@ public class IwlanDataServiceTest {
                 null, /* LinkProperties */
                 2, /* pdu session id */
                 null, /* sliceInfo */
+                null, /* trafficDescriptor */
+                true, /* matchAllRuleAllowed */
                 mMockDataServiceCallback);
 
         verify(mMockDataServiceCallback, timeout(1000).times(1))
@@ -343,6 +345,8 @@ public class IwlanDataServiceTest {
                 null, /* LinkProperties */
                 1, /* pdu session id */
                 null, /* sliceInfo */
+                null, /* trafficDescriptor */
+                true, /* matchAllRuleAllowed */
                 mMockDataServiceCallback);
 
         verify(mMockDataServiceCallback, timeout(1000).times(1))
@@ -379,6 +383,8 @@ public class IwlanDataServiceTest {
                 null, /* LinkProperties */
                 1, /* pduSessionId */
                 null, /* sliceInfo */
+                null, /* trafficDescriptor */
+                true, /* matchAllRuleAllowed */
                 mMockDataServiceCallback);
 
         /* Check bringUpTunnel() is called. */
@@ -583,6 +589,8 @@ public class IwlanDataServiceTest {
                 null, /* LinkProperties */
                 1, /* pdu session id */
                 null, /* sliceInfo */
+                null, /* trafficDescriptor */
+                true, /* matchAllRuleAllowed */
                 mMockDataServiceCallback);
 
         verify(mMockDataServiceCallback, timeout(1000).times(1))
@@ -622,6 +630,8 @@ public class IwlanDataServiceTest {
                 null, /* LinkProperties */
                 1, /* pduSessionId */
                 null, /* sliceInfo */
+                null, /* trafficDescriptor */
+                true, /* matchAllRuleAllowed */
                 mMockDataServiceCallback);
 
         /* Check bringUpTunnel() is called. */
