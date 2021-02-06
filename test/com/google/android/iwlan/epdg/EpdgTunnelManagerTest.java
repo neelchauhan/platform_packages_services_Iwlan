@@ -499,7 +499,8 @@ public class EpdgTunnelManagerTest {
             ikeSessionCallback = verifyCreateIkeSession(ip);
             // Call onclosed with IOException - which should trigger bringup tunnel for the next
             // address
-            ikeSessionCallback.onClosedExceptionally(new IkeInternalException(new IOException()));
+            ikeSessionCallback.onClosedExceptionally(
+                    new IkeInternalException(new IOException("Retransmitting failure")));
             Thread.sleep(500);
         }
 
@@ -559,7 +560,9 @@ public class EpdgTunnelManagerTest {
         for (int i = 0; i <= MAX_RETRIES; i++) {
             ikeSessionCallback = verifyCreateIkeSession(ipList.get(i));
             // last report of this onClosedExceptionally should trigger tunnel closed callback
-            ikeSessionCallback.onClosedExceptionally(new IkeInternalException(new IOException()));
+            ikeSessionCallback.onClosedExceptionally(
+                    new IkeInternalException(
+                            new IOException("Retransmitting IKE INIT request failure")));
             Thread.sleep(500);
         }
         // Verify onclosed being called without exhausting the ipList.
