@@ -689,7 +689,8 @@ public class ErrorPolicyManager {
     private void updateUnthrottlingEvents() {
         Set<Integer> registerEvents, unregisterEvents;
         unregisterEvents = mUnthrottlingEvents;
-        registerEvents = mUnthrottlingEvents = getAllUnthrottlingEvents();
+        registerEvents = getAllUnthrottlingEvents();
+        mUnthrottlingEvents = getAllUnthrottlingEvents();
 
         if (registerEvents != null && unregisterEvents != null) {
             registerEvents.removeAll(unregisterEvents);
