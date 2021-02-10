@@ -956,4 +956,15 @@ public class IwlanDataService extends DataService {
         Log.d(TAG, "Iwlanservice onBind");
         return super.onBind(intent);
     }
+
+    @Override
+    public boolean onUnbind(Intent intent) {
+        Log.d(TAG, "IwlanService onUnbind");
+        // force close all the tunnels when there are no clients
+        // active
+        for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
+            dp.forceCloseTunnels();
+        }
+        return super.onUnbind(intent);
+    }
 }
