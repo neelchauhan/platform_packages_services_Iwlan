@@ -113,11 +113,11 @@ public class IwlanNetworkService extends NetworkService {
             Log.d(TAG, "onCapabilitiesChanged: " + network);
             if (networkCapabilities != null) {
                 if (networkCapabilities.hasTransport(TRANSPORT_CELLULAR)) {
-                    IwlanDataService.setNetworkConnected(
-                            true, network, IwlanDataService.Transport.MOBILE);
+                    IwlanNetworkService.setNetworkConnected(
+                            true, IwlanNetworkService.Transport.MOBILE);
                 } else if (networkCapabilities.hasTransport(TRANSPORT_WIFI)) {
-                    IwlanDataService.setNetworkConnected(
-                            true, network, IwlanDataService.Transport.WIFI);
+                    IwlanNetworkService.setNetworkConnected(
+                            true, IwlanNetworkService.Transport.WIFI);
                 } else {
                     Log.w(TAG, "Network does not have cellular or wifi capability");
                 }
