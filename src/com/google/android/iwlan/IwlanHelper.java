@@ -25,11 +25,11 @@ import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.PersistableBundle;
 import android.telephony.CarrierConfigManager;
-import android.telephony.ims.ImsManager;
-import android.telephony.ims.ImsMmTelManager;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
+import android.telephony.ims.ImsManager;
+import android.telephony.ims.ImsMmTelManager;
 
 import java.net.Inet4Address;
 import java.net.Inet6Address;
@@ -50,9 +50,15 @@ public class IwlanHelper {
     public static String getNai(Context context, int slotId, boolean addWifiMac) {
         StringBuilder naiBuilder = new StringBuilder();
         TelephonyManager tm = context.getSystemService(TelephonyManager.class);
+        SubscriptionInfo subInfo = null;
         tm = tm.createForSubscriptionId(getSubId(context, slotId));
 
-        SubscriptionInfo subInfo = getSubInfo(context, slotId);
+        try {
+            subInfo = getSubInfo(context, slotId);
+        } catch (IllegalStateException e) {
+            return null;
+        }
+
         String mnc = subInfo.getMncString();
         mnc = (mnc.length() == 2) ? '0' + mnc : mnc;
 
@@ -85,10 +91,18 @@ public class IwlanHelper {
     }
 
     public static int getSubId(Context context, int slotId) {
-        return getSubInfo(context, slotId).getSubscriptionId();
+        int subid = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+
+        try {
+            subid = getSubInfo(context, slotId).getSubscriptionId();
+        } catch (IllegalStateException e) {
+            subid = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+        }
+        return subid;
     }
 
-    private static SubscriptionInfo getSubInfo(Context context, int slotId) {
+    private static SubscriptionInfo getSubInfo(Context context, int slotId)
+            throws IllegalStateException {
         SubscriptionManager sm = context.getSystemService(SubscriptionManager.class);
         SubscriptionInfo info = sm.getActiveSubscriptionInfoForSimSlotIndex(slotId);
 
@@ -215,13 +229,10 @@ public class IwlanHelper {
 
     public static boolean isCrossSimCallingEnabled(Context context, int slotId) {
         boolean isCstEnabled = false;
-        SubscriptionManager sm = context.getSystemService(SubscriptionManager.class);
-        int subid = sm.INVALID_SUBSCRIPTION_ID;
+        int subid = getSubId(context, slotId);
 
-        try {
-            subid = getSubId(context, slotId);
-        } catch (Exception e) {
-            // Fail to query subscription id, just return false to avoid an exception.
+        if (subid == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+            // Fail to query subscription id, just return false.
             return false;
         }
 
