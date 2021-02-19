@@ -47,7 +47,7 @@ public class IwlanHelper {
 
     private static final String TAG = IwlanHelper.class.getSimpleName();
 
-    public static String getNai(Context context, int slotId, boolean addWifiMac) {
+    public static String getNai(Context context, int slotId) {
         StringBuilder naiBuilder = new StringBuilder();
         TelephonyManager tm = context.getSystemService(TelephonyManager.class);
         SubscriptionInfo subInfo = null;
@@ -63,23 +63,6 @@ public class IwlanHelper {
         mnc = (mnc.length() == 2) ? '0' + mnc : mnc;
 
         naiBuilder.append('0').append(tm.getSubscriberId()).append('@');
-
-        if (addWifiMac) {
-            WifiManager wifiManager = context.getSystemService(WifiManager.class);
-
-            if (wifiManager != null) {
-                WifiInfo wifiInfo = wifiManager.getConnectionInfo();
-                String wifiMacId =
-                        (wifiInfo == null || wifiInfo.getBSSID() == null)
-                                ? WifiInfo.DEFAULT_MAC_ADDRESS
-                                : wifiInfo.getBSSID();
-                wifiMacId = wifiMacId.replace(':', '-');
-                naiBuilder.append(wifiMacId.toUpperCase());
-                naiBuilder.append(':');
-            } else {
-                throw new IllegalStateException("WifiManager is null.");
-            }
-        }
 
         return naiBuilder
                 .append("nai.epc.mnc")
