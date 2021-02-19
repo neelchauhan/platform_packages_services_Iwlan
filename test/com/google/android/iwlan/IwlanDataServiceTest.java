@@ -29,6 +29,7 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.LinkAddress;
+import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.telephony.AccessNetworkConstants.AccessNetworkType;
@@ -65,6 +66,7 @@ import org.mockito.MockitoSession;
 import org.mockito.quality.Strictness;
 
 import java.net.Inet4Address;
+import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
@@ -98,6 +100,11 @@ public class IwlanDataServiceTest {
     @Mock private ImsMmTelManager mMockImsMmTelManager;
     @Mock private TelephonyManager mMockTelephonyManager;
     @Mock private EpdgSelector mMockEpdgSelector;
+    @Mock private LinkProperties mMockLinkProperties;
+    @Mock private LinkAddress mMockIPv4LinkAddress;
+    @Mock private LinkAddress mMockIPv6LinkAddress;
+    @Mock private Inet4Address mMockInet4Address;
+    @Mock private Inet6Address mMockInet6Address;
     MockitoSession mStaticMockSession;
 
     private List<DataCallResponse> mResultDataCallList;
@@ -196,6 +203,9 @@ public class IwlanDataServiceTest {
 
         when(EpdgSelector.getSelectorInstance(eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
                 .thenReturn(mMockEpdgSelector);
+
+        when(mMockIPv4LinkAddress.getAddress()).thenReturn(mMockInet4Address);
+        when(mMockIPv6LinkAddress.getAddress()).thenReturn(mMockInet6Address);
 
         mIwlanDataService = spy(new IwlanDataService());
         mIwlanDataService.setAppContext(mMockContext);
@@ -543,9 +553,17 @@ public class IwlanDataServiceTest {
     }
 
     @Test
-    public void testCarrierConfigEventReceived() throws Exception {
+    public void testDnsPrefetching() throws Exception {
+        IwlanNetworkMonitorCallback mNetworkMonitorCallback =
+                mIwlanDataService.getNetworkMonitorCallback();
         /* Wifi is connected */
         mIwlanDataService.setNetworkConnected(true, mMockNetwork, IwlanDataService.Transport.WIFI);
+
+        List<LinkAddress> linkAddresses = new ArrayList<>();
+        linkAddresses.add(mMockIPv4LinkAddress);
+
+        when(mMockLinkProperties.getLinkAddresses()).thenReturn(linkAddresses);
+        mNetworkMonitorCallback.onLinkPropertiesChanged(mMockNetwork, mMockLinkProperties);
 
         mIwlanDataServiceProvider
                 .mHandler
@@ -559,14 +577,23 @@ public class IwlanDataServiceTest {
                 .sendToTarget();
         sleep(1000);
 
-        verify(mMockEpdgSelector, times(1))
+        linkAddresses.add(mMockIPv6LinkAddress);
+
+        when(mMockLinkProperties.getLinkAddresses()).thenReturn(linkAddresses);
+        mNetworkMonitorCallback.onLinkPropertiesChanged(mMockNetwork, mMockLinkProperties);
+
+        /* Prefetching will be triggered twice.
+           1. Network connected, CarrierConfig ready, WifiCallingSetting enabled
+           2. Connection ipFamily changed.
+        */
+        verify(mMockEpdgSelector, times(2))
                 .getValidatedServerList(
                         eq(EpdgSelector.PROTO_FILTER_IPV4V6),
                         eq(false),
                         eq(false),
                         eq(mMockNetwork),
                         isNull());
-        verify(mMockEpdgSelector, times(1))
+        verify(mMockEpdgSelector, times(2))
                 .getValidatedServerList(
                         eq(EpdgSelector.PROTO_FILTER_IPV4V6),
                         eq(false),
