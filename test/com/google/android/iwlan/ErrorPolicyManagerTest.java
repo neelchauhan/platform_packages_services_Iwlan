@@ -562,7 +562,7 @@ public class ErrorPolicyManagerTest {
         assertEquals(5, time);
 
         int failCause = mErrorPolicyManager.getDataFailCause(apn1);
-        assertEquals(DataFailCause.USER_AUTHENTICATION, failCause);
+        assertEquals(DataFailCause.IWLAN_IKEV2_AUTH_FAILURE, failCause);
 
         failCause = mErrorPolicyManager.getDataFailCause(apn2);
         assertEquals(DataFailCause.IWLAN_PDN_CONNECTION_REJECTION, failCause);
