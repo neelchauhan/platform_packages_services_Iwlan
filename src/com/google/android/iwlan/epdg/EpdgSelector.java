@@ -150,11 +150,10 @@ public class EpdgSelector {
                         @Override
                         public void onAnswer(
                                 @NonNull final List<InetAddress> answer, final int rcode) {
-                            if (rcode == 0) {
-                                result.complete(answer);
-                            } else {
-                                Log.e(TAG, "DnsResover Response Code = " + rcode);
+                            if (rcode != 0) {
+                                Log.e(TAG, "DnsResolver Response Code = " + rcode);
                             }
+                            result.complete(answer);
                         }
 
                         @Override
