@@ -44,6 +44,7 @@ import android.telephony.data.DataProfile;
 import android.telephony.data.DataService;
 import android.telephony.data.DataServiceCallback;
 import android.telephony.data.SliceInfo;
+import android.telephony.data.TrafficDescriptor;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -532,6 +533,17 @@ public class IwlanDataService extends DataService {
          *     of values are 1-15 while 0 means no pdu session id was attached to this call.
          *     Reference: 3GPP TS 24.007 section 11.2.3.1b.
          * @param sliceInfo The slice info related to this data call.
+         * @param trafficDescriptor TrafficDescriptor for which data connection needs to be
+         *     established. It is used for URSP traffic matching as described in 3GPP TS 24.526
+         *     Section 4.2.2. It includes an optional DNN which, if present, must be used for
+         *     traffic matching; it does not specify the end point to be used for the data call.
+         * @param matchAllRuleAllowed Indicates if using default match-all URSP rule for this
+         *     request is allowed. If false, this request must not use the match-all URSP rule and
+         *     if a non-match-all rule is not found (or if URSP rules are not available) then {@link
+         *     DataCallResponse#getCause()} is {@link
+         *     android.telephony.DataFailCause#MATCH_ALL_RULE_NOT_ALLOWED}. This is needed as some
+         *     requests need to have a hard failure if the intention cannot be met, for example, a
+         *     zero-rating slice.
          * @param callback The result callback for this request.
          */
         @Override
@@ -544,20 +556,26 @@ public class IwlanDataService extends DataService {
                 @Nullable LinkProperties linkProperties,
                 @IntRange(from = 0, to = 15) int pduSessionId,
                 @Nullable SliceInfo sliceInfo,
+                @Nullable TrafficDescriptor trafficDescriptor,
+                boolean matchAllRuleAllowed,
                 @NonNull DataServiceCallback callback) {
 
             Log.d(
                     SUB_TAG,
                     "Setup data call with network: "
                             + accessNetworkType
-                            + " reason: "
+                            + ", DataProfile: "
+                            + dataProfile
+                            + ", isRoaming:"
+                            + isRoaming
+                            + ", allowRoaming: "
+                            + allowRoaming
+                            + ", reason: "
                             + reason
-                            + " pduSessionId: "
-                            + pduSessionId
-                            + " linkProperties: "
+                            + ", linkProperties: "
                             + linkProperties
-                            + "DataProfile: "
-                            + dataProfile);
+                            + ", pduSessionId: "
+                            + pduSessionId);
 
             // Framework will never call bringup on the same APN back 2 back.
             // but add a safety check
