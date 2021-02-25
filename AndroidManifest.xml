@@ -21,10 +21,10 @@
   <protected-broadcast android:name="IkeAlarmReceiver.ACTION_KEEPALIVE" />
 
   <application
-      android:exported="true"
       android:directBootAware="true"
       android:defaultToDeviceProtectedStorage="true">
     <service android:name=".IwlanDataService"
+         android:exported="true"
          android:permission="android.permission.BIND_TELEPHONY_DATA_SERVICE"
          android:enabled="true" >
          <intent-filter>
@@ -32,13 +32,15 @@
          </intent-filter>
       </service>
       <service android:name=".IwlanNetworkService"
+               android:exported="true"
                android:permission="android.permission.BIND_TELEPHONY_NETWORK_SERVICE"
                android:enabled="true" >
           <intent-filter>
               <action android:name="android.telephony.NetworkService" />
           </intent-filter>
       </service>
-    <receiver android:name=".IwlanBroadcastReceiver">
+    <receiver android:name=".IwlanBroadcastReceiver"
+              android:exported="true">
          <intent-filter>
             <action android:name="android.telephony.action.CARRIER_CONFIG_CHANGED"/>
             <action android:name="android.telephony.action.CARRIER_SIGNAL_PCO_VALUE"/>
