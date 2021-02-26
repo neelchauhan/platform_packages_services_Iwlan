@@ -16,6 +16,7 @@ android_app {
         "android.net.ipsec.ike.stubs.system",
         "auto_value_annotations",
 	"framework-annotations-lib",
+	"framework-connectivity",
 	"framework-wifi"
     ],
 
