@@ -295,8 +295,7 @@ public class ErrorPolicyManager {
                 int protocolErrorType = ((IkeProtocolException) exception).getErrorType();
                 switch (protocolErrorType) {
                     case IkeProtocolException.ERROR_TYPE_AUTHENTICATION_FAILED:
-                        // TODO: Change this as per b/175719031
-                        ret = DataFailCause.USER_AUTHENTICATION;
+                        ret = DataFailCause.IWLAN_IKEV2_AUTH_FAILURE;
                         break;
                     case IKE_PROTOCOL_ERROR_PDN_CONNECTION_REJECTION:
                         ret = DataFailCause.IWLAN_PDN_CONNECTION_REJECTION;
