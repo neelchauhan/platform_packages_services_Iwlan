@@ -58,6 +58,7 @@ import android.support.annotation.NonNull;
 import android.telephony.CarrierConfigManager;
 import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
+import android.telephony.data.SliceInfo;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -225,16 +226,16 @@ public class EpdgTunnelManager {
         private List<InetAddress> mPcscfAddrList;
         private List<InetAddress> mDnsAddrList;
         private List<LinkAddress> mInternalAddrList;
-        private byte[] mSnssai;
+        private SliceInfo mSliceInfo;
         private boolean mIsBackoffTimeValid = false;
         private long mBackoffTime;
 
-        public byte[] getSnssai() {
-            return mSnssai;
+        public SliceInfo getSliceInfo() {
+            return mSliceInfo;
         }
 
-        public void setSnssai(byte[] snssai) {
-            mSnssai = snssai;
+        public void setSliceInfo(SliceInfo si) {
+            mSliceInfo = si;
         }
 
         public boolean isBackoffTimeValid() {
@@ -365,13 +366,22 @@ public class EpdgTunnelManager {
                 TunnelConfig tunnelConfig = mApnNameToTunnelConfig.get(mApnName);
                 for (Ike3gppData payload : payloads) {
                     if (payload.getDataType() == DATA_TYPE_NOTIFY_N1_MODE_INFORMATION) {
-                        tunnelConfig.setSnssai(((Ike3gppN1ModeInformation) payload).getSnssai());
+                        Log.d(TAG, "Got payload DATA_TYPE_NOTIFY_N1_MODE_INFORMATION");
+                        SliceInfo si =
+                                NetworkSliceSelectionAssistanceInformation.getSliceInfo(
+                                        ((Ike3gppN1ModeInformation) payload).getSnssai());
+                        if (si != null) {
+                            tunnelConfig.setSliceInfo(si);
+                            Log.d(TAG, "SliceInfo: " + si);
+                        }
                     } else if (payload.getDataType() == DATA_TYPE_NOTIFY_BACKOFF_TIMER) {
+                        Log.d(TAG, "Got payload DATA_TYPE_NOTIFY_BACKOFF_TIMER");
                         long backoffTime =
                                 decodeBackoffTime(
                                         ((Ike3gppBackoffTimer) payload).getBackoffTimer());
                         if (backoffTime > 0) {
                             tunnelConfig.setBackoffTime(backoffTime);
+                            Log.d(TAG, "Backoff Timer: " + backoffTime);
                         }
                     }
                 }
@@ -412,7 +422,7 @@ public class EpdgTunnelManager {
                             .setDnsAddresses(tunnelConfig.getDnsAddrList())
                             .setPcscfAddresses(tunnelConfig.getPcscfAddrList())
                             .setIfaceName(tunnelConfig.getIface().getInterfaceName())
-                            .setSNssai(tunnelConfig.getSnssai())
+                            .setSliceInfo(tunnelConfig.getSliceInfo())
                             .build();
             mHandler.dispatchMessage(
                     mHandler.obtainMessage(
@@ -1026,7 +1036,7 @@ public class EpdgTunnelManager {
                 String message = error.getException().getCause().getMessage();
                 if (message != null
                         && (message.equals("Retransmitting IKE INIT request failure")
-                        || message.equals("Retransmitting failure"))) {
+                                || message.equals("Retransmitting failure"))) {
                     return true;
                 }
             }
