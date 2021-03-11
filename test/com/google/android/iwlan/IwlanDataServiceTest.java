@@ -235,7 +235,7 @@ public class IwlanDataServiceTest {
         boolean ret = mIwlanDataService.isNetworkConnected(true, false);
 
         assertFalse(ret);
-        verify(mMockIwlanDataServiceProvider).forceCloseTunnelsInDeactivatingState();
+        verify(mMockIwlanDataServiceProvider).forceCloseTunnels();
         mIwlanDataService.removeDataServiceProvider(mMockIwlanDataServiceProvider);
     }
 
