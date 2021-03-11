@@ -17,6 +17,7 @@
 package com.google.android.iwlan.epdg;
 
 import android.net.LinkAddress;
+import android.telephony.data.SliceInfo;
 
 import java.net.InetAddress;
 import java.util.LinkedList;
@@ -28,7 +29,8 @@ public class TunnelLinkPropertiesTest {
     private static final String DNS_ADDRESS = "8.8.8.8";
     private static final String PSCF_ADDRESS = "10.159.204.230";
     private static final String INTERFACE_NAME = "ipsec6";
-    private static final byte[] SNSSAI = new byte[] {1, 2, 3};
+    private static final SliceInfo SLICE_INFO =
+            NetworkSliceSelectionAssistanceInformation.getSliceInfo(new byte[] {1});
 
     public static TunnelLinkProperties createTestTunnelLinkProperties() throws Exception {
         List<LinkAddress> mInternalAddressList = new LinkedList<>();
@@ -47,7 +49,7 @@ public class TunnelLinkPropertiesTest {
                 .setDnsAddresses(mDNSAddressList)
                 .setPcscfAddresses(mPCSFAddressList)
                 .setIfaceName(INTERFACE_NAME)
-                .setSNssai(SNSSAI)
+                .setSliceInfo(SLICE_INFO)
                 .build();
     }
 }

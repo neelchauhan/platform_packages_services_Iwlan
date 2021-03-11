@@ -401,6 +401,49 @@ public class IwlanDataServiceTest {
     }
 
     @Test
+    public void testSliceInfoInclusionInDataCallResponse() throws Exception {
+        DataProfile dp = buildDataProfile();
+
+        /* Wifi is connected */
+        mIwlanDataService.setNetworkConnected(true, mMockNetwork, IwlanDataService.Transport.WIFI);
+
+        doReturn(mMockEpdgTunnelManager).when(mSpyIwlanDataServiceProvider).getTunnelManager();
+
+        mSpyIwlanDataServiceProvider.setupDataCall(
+                AccessNetworkType.IWLAN, /* AccessNetworkType */
+                dp, /* dataProfile */
+                false, /* isRoaming */
+                true, /* allowRoaming */
+                DataService.REQUEST_REASON_NORMAL, /* DataService.REQUEST_REASON_NORMAL */
+                null, /* LinkProperties */
+                1, /* pduSessionId */
+                null, /* sliceInfo */
+                null, /* trafficDescriptor */
+                true, /* matchAllRuleAllowed */
+                mMockDataServiceCallback);
+
+        /* Check bringUpTunnel() is called. */
+        verify(mMockEpdgTunnelManager, times(1))
+                .bringUpTunnel(any(TunnelSetupRequest.class), any(IwlanTunnelCallback.class));
+
+        /* Check callback result is RESULT_SUCCESS when onOpened() is called. */
+        TunnelLinkProperties tp = TunnelLinkPropertiesTest.createTestTunnelLinkProperties();
+
+        ArgumentCaptor<DataCallResponse> dataCallResponseCaptor =
+                ArgumentCaptor.forClass(DataCallResponse.class);
+
+        mSpyIwlanDataServiceProvider.getIwlanTunnelCallback().onOpened(TEST_APN_NAME, tp);
+        verify(mMockDataServiceCallback, times(1))
+                .onSetupDataCallComplete(
+                        eq(DataServiceCallback.RESULT_SUCCESS), dataCallResponseCaptor.capture());
+
+        /* check that sliceinfo is filled up and matches */
+        DataCallResponse dataCallResponse = dataCallResponseCaptor.getValue();
+        assertNotNull(dataCallResponse.getSliceInfo());
+        assertEquals(dataCallResponse.getSliceInfo(), tp.sliceInfo().get());
+    }
+
+    @Test
     public void testIwlanDeactivateDataCallWithCloseTunnel() {
         DataProfile dp = buildDataProfile();
 

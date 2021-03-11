@@ -456,6 +456,11 @@ public class IwlanDataService extends DataService {
                 }
             }
 
+            if (tunnelState.getTunnelLinkProperties().sliceInfo().isPresent()) {
+                responseBuilder.setSliceInfo(
+                        tunnelState.getTunnelLinkProperties().sliceInfo().get());
+            }
+
             return responseBuilder
                     .setAddresses(linkAddrList)
                     .setDnsAddresses(tunnelState.getTunnelLinkProperties().dnsAddresses())
