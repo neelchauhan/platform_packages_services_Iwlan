@@ -17,7 +17,7 @@
 package com.google.android.iwlan.epdg;
 
 import android.net.LinkAddress;
-import android.telephony.data.SliceInfo;
+import android.telephony.data.NetworkSliceInfo;
 
 import com.google.auto.value.AutoValue;
 
@@ -35,7 +35,7 @@ public abstract class TunnelLinkProperties {
 
     public abstract String ifaceName();
 
-    public abstract Optional<SliceInfo> sliceInfo();
+    public abstract Optional<NetworkSliceInfo> sliceInfo();
 
     static Builder builder() {
         return new AutoValue_TunnelLinkProperties.Builder().setSliceInfo(Optional.empty());
@@ -51,11 +51,11 @@ public abstract class TunnelLinkProperties {
 
         abstract Builder setIfaceName(String ifaceName);
 
-        public Builder setSliceInfo(SliceInfo si) {
+        public Builder setSliceInfo(NetworkSliceInfo si) {
             return setSliceInfo(Optional.ofNullable(si));
         }
 
-        abstract Builder setSliceInfo(Optional<SliceInfo> si);
+        abstract Builder setSliceInfo(Optional<NetworkSliceInfo> si);
 
         abstract TunnelLinkProperties build();
     }

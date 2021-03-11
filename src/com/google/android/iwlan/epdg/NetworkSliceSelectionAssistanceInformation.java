@@ -1,7 +1,7 @@
 package com.google.android.iwlan.epdg;
 
 import android.support.annotation.NonNull;
-import android.telephony.data.SliceInfo;
+import android.telephony.data.NetworkSliceInfo;
 import android.util.Log;
 
 import java.util.Arrays;
@@ -12,7 +12,7 @@ public class NetworkSliceSelectionAssistanceInformation {
             NetworkSliceSelectionAssistanceInformation.class.getSimpleName();
     static final List<Integer> VALID_LENGTHS = Arrays.asList(1, 2, 4, 5, 8);
 
-    public static SliceInfo getSliceInfo(byte[] snssai) {
+    public static NetworkSliceInfo getSliceInfo(byte[] snssai) {
         if (snssai == null) {
             return null;
         }
@@ -34,7 +34,7 @@ public class NetworkSliceSelectionAssistanceInformation {
          * 0 0 0 0 1 0 0 0 SST, SD, mapped HPLMN SST and mapped HPLMN SD
          * All other values are reserved.
          */
-        SliceInfo.Builder siBuilder = new SliceInfo.Builder();
+        NetworkSliceInfo.Builder siBuilder = new NetworkSliceInfo.Builder();
         int len = snssai.length;
         // validity checks. See TS 24.501 Section 9.11.2.8
         // length should be valid
@@ -73,7 +73,7 @@ public class NetworkSliceSelectionAssistanceInformation {
 
     private static int getSST(@NonNull byte[] snssai, int offset) {
         if (offset < 0 || snssai.length < offset + 1) {
-            return SliceInfo.SLICE_SERVICE_TYPE_NONE;
+            return NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE;
         }
         /**
          * From 3GPP TS 23.003: Values 0 to 127 belong to the standardized SST range and they are
@@ -83,7 +83,7 @@ public class NetworkSliceSelectionAssistanceInformation {
     }
 
     private static int getSD(byte[] snssai, int offset) {
-        int sliceDescriptor = SliceInfo.SLICE_SERVICE_TYPE_NONE;
+        int sliceDescriptor = NetworkSliceInfo.SLICE_SERVICE_TYPE_NONE;
         /*
          * Slice Descriptor is 3 bytes long
          * The SD field has a reserved value "no SD value associated with the SST"
