@@ -134,11 +134,13 @@ public class IwlanDataService extends DataService {
                 Network network, NetworkCapabilities networkCapabilities) {
             // onCapabilitiesChanged is guaranteed to be called immediately after onAvailable per
             // API
-            Log.d(TAG, "onCapabilitiesChanged: " + network);
+            Log.d(TAG, "onCapabilitiesChanged: " + network + " " + networkCapabilities);
             if (networkCapabilities != null) {
                 if (networkCapabilities.hasTransport(TRANSPORT_CELLULAR)) {
+                    Log.d(TAG, "Network " + network + " connected using transport MOBILE");
                     IwlanDataService.setNetworkConnected(true, network, Transport.MOBILE);
                 } else if (networkCapabilities.hasTransport(TRANSPORT_WIFI)) {
+                    Log.d(TAG, "Network " + network + " connected using transport WIFI");
                     IwlanDataService.setNetworkConnected(true, network, Transport.WIFI);
                 } else {
                     Log.w(TAG, "Network does not have cellular or wifi capability");
@@ -597,11 +599,20 @@ public class IwlanDataService extends DataService {
             }
 
             synchronized (mTunnelStateForApn) {
-                if (isNetworkConnected(
-                                        IwlanHelper.isDefaultDataSlot(mContext, getSlotIndex()),
-                                        IwlanHelper.isCrossSimCallingEnabled(
-                                                mContext, getSlotIndex()))
-                                == false
+                boolean isDDS = IwlanHelper.isDefaultDataSlot(mContext, getSlotIndex());
+                boolean isCSTEnabled =
+                        IwlanHelper.isCrossSimCallingEnabled(mContext, getSlotIndex());
+                boolean networkConnected = isNetworkConnected(isDDS, isCSTEnabled);
+                Log.d(
+                        SUB_TAG,
+                        "isDds: "
+                                + isDDS
+                                + ", isCstEnabled: "
+                                + isCSTEnabled
+                                + ", transport: "
+                                + sDefaultDataTransport);
+
+                if (networkConnected == false
                         || mTunnelStateForApn.get(dataProfile.getApn()) != null) {
                     deliverCallback(
                             CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
@@ -697,14 +708,12 @@ public class IwlanDataService extends DataService {
                         */
                         mTunnelStateForApn.get(apnName).setState(TunnelState.TUNNEL_IN_BRINGDOWN);
                         mTunnelStateForApn.get(apnName).setDataServiceCallback(callback);
-                        getTunnelManager()
-                                .closeTunnel(
-                                        apnName,
-                                        !isNetworkConnected(
-                                                IwlanHelper.isDefaultDataSlot(
-                                                        mContext, getSlotIndex()),
-                                                IwlanHelper.isCrossSimCallingEnabled(
-                                                        mContext, getSlotIndex())));
+                        boolean isConnected =
+                                isNetworkConnected(
+                                        IwlanHelper.isDefaultDataSlot(mContext, getSlotIndex()),
+                                        IwlanHelper.isCrossSimCallingEnabled(
+                                                mContext, getSlotIndex()));
+                        getTunnelManager().closeTunnel(apnName, !isConnected);
                         return;
                     }
                 }
@@ -728,7 +737,7 @@ public class IwlanDataService extends DataService {
             }
         }
 
-        private void forceCloseTunnels() {
+        void forceCloseTunnels() {
             synchronized (mTunnelStateForApn) {
                 for (Map.Entry<String, TunnelState> entry : mTunnelStateForApn.entrySet()) {
                     getTunnelManager().closeTunnel(entry.getKey(), true);
@@ -781,7 +790,6 @@ public class IwlanDataService extends DataService {
                         && mCarrierConfigReady == true
                         && mWfcEnabled == true
                         && mTunnelStateForApn.isEmpty()) {
-                    Log.d(TAG, "Trigger DNS prefetching");
 
                     // Get roaming status
                     TelephonyManager telephonyManager =
@@ -790,18 +798,9 @@ public class IwlanDataService extends DataService {
                             telephonyManager.createForSubscriptionId(
                                     IwlanHelper.getSubId(mContext, getSlotIndex()));
                     boolean isRoaming = telephonyManager.isNetworkRoaming();
-                    Log.d(TAG, "is Roaming " + isRoaming);
+                    Log.d(TAG, "Trigger EPDG prefetch. Roaming=" + isRoaming);
 
                     prefetchEpdgServerList(mIwlanDataService.sNetwork, isRoaming);
-                } else {
-                    Log.d(
-                            TAG,
-                            "Network connected:"
-                                    + networkConnected
-                                    + " CarrierConfigReady:"
-                                    + mCarrierConfigReady
-                                    + " WfcEnabled:"
-                                    + mWfcEnabled);
                 }
             }
         }
@@ -828,14 +827,6 @@ public class IwlanDataService extends DataService {
 
     @VisibleForTesting
     static boolean isNetworkConnected(boolean isDds, boolean isCstEnabled) {
-        Log.d(
-                TAG,
-                "isDds: "
-                        + isDds
-                        + ", isCstEnabled: "
-                        + isCstEnabled
-                        + ", transport: "
-                        + sDefaultDataTransport);
         if (!isDds && isCstEnabled) {
             // Only Non-DDS sub with CST enabled, can use any transport.
             return sNetworkConnected;
@@ -846,18 +837,17 @@ public class IwlanDataService extends DataService {
     }
 
     @VisibleForTesting
+    /* Note: this api should have valid transport if networkConnected==true */
     static void setNetworkConnected(
             boolean networkConnected, Network network, Transport transport) {
         sNetworkConnected = networkConnected;
         sNetwork = network;
-
         if (networkConnected) {
             if (transport == Transport.UNSPECIFIED_NETWORK) {
-                // just return since we do not know the transport yet
+                Log.e(TAG, "setNetworkConnected: Network connected but transport unspecified");
                 return;
             }
-            if (sDefaultDataTransport != Transport.UNSPECIFIED_NETWORK
-                    && transport != sDefaultDataTransport) {
+            if (transport != sDefaultDataTransport) {
                 Log.d(
                         TAG,
                         "Transport was changed from "
@@ -874,7 +864,9 @@ public class IwlanDataService extends DataService {
 
         if (!networkConnected) {
             for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
-                dp.forceCloseTunnelsInDeactivatingState();
+                //once network is disconnect, even NAT KA offload fails
+                //so we should force close all tunnels
+                dp.forceCloseTunnels();
             }
         } else {
             if (transport == Transport.WIFI) {
