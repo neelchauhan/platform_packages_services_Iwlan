@@ -21,8 +21,6 @@ import android.net.ConnectivityManager;
 import android.net.LinkAddress;
 import android.net.LinkProperties;
 import android.net.Network;
-import android.net.wifi.WifiInfo;
-import android.net.wifi.WifiManager;
 import android.os.PersistableBundle;
 import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionInfo;
@@ -224,7 +222,7 @@ public class IwlanHelper {
             ImsMmTelManager imsMmTelManager = imsManager.getImsMmTelManager(subid);
             if (imsMmTelManager != null) {
                 try {
-                    isCstEnabled = imsMmTelManager.isCrossSimCallingEnabledByUser();
+                    isCstEnabled = imsMmTelManager.isCrossSimCallingEnabled();
                 } catch (Exception e) {
                     // Fail to query Cross-SIM calling setting, just return false to avoid an
                     // exception.
