@@ -42,6 +42,7 @@ import android.net.ipsec.ike.IkeSessionCallback;
 import android.net.ipsec.ike.IkeSessionConfiguration;
 import android.net.ipsec.ike.IkeSessionParams;
 import android.net.ipsec.ike.IkeTrafficSelector;
+import android.net.ipsec.ike.SaProposal;
 import android.net.ipsec.ike.TunnelModeChildSessionParams;
 import android.net.ipsec.ike.exceptions.IkeException;
 import android.net.ipsec.ike.exceptions.IkeProtocolException;
@@ -163,48 +164,43 @@ public class EpdgTunnelManager {
                 Collections.unmodifiableSet(
                         new HashSet<>(
                                 Arrays.asList(
-                                        CarrierConfigManager.Iwlan.DH_GROUP_1024_BIT_MODP,
-                                        CarrierConfigManager.Iwlan.DH_GROUP_1536_BIT_MODP,
-                                        CarrierConfigManager.Iwlan.DH_GROUP_2048_BIT_MODP)));
+                                        SaProposal.DH_GROUP_1024_BIT_MODP,
+                                        SaProposal.DH_GROUP_1536_BIT_MODP,
+                                        SaProposal.DH_GROUP_2048_BIT_MODP)));
         VALID_KEY_LENGTHS =
                 Collections.unmodifiableSet(
                         new HashSet<>(
                                 Arrays.asList(
-                                        CarrierConfigManager.Iwlan.KEY_LEN_AES_128,
-                                        CarrierConfigManager.Iwlan.KEY_LEN_AES_192,
-                                        CarrierConfigManager.Iwlan.KEY_LEN_AES_256)));
+                                        SaProposal.KEY_LEN_AES_128,
+                                        SaProposal.KEY_LEN_AES_192,
+                                        SaProposal.KEY_LEN_AES_256)));
 
         VALID_ENCRYPTION_ALGOS =
                 Collections.unmodifiableSet(
                         new HashSet<>(
                                 Arrays.asList(
-                                        CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CBC,
-                                        CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CTR)));
+                                        SaProposal.ENCRYPTION_ALGORITHM_AES_CBC,
+                                        SaProposal.ENCRYPTION_ALGORITHM_AES_CTR)));
 
         VALID_INTEGRITY_ALGOS =
                 Collections.unmodifiableSet(
                         new HashSet<>(
                                 Arrays.asList(
-                                        CarrierConfigManager.Iwlan.INTEGRITY_ALGORITHM_HMAC_SHA1_96,
-                                        CarrierConfigManager.Iwlan.INTEGRITY_ALGORITHM_AES_XCBC_96,
-                                        CarrierConfigManager.Iwlan
-                                                .INTEGRITY_ALGORITHM_HMAC_SHA2_256_128,
-                                        CarrierConfigManager.Iwlan
-                                                .INTEGRITY_ALGORITHM_HMAC_SHA2_384_192,
-                                        CarrierConfigManager.Iwlan
-                                                .INTEGRITY_ALGORITHM_HMAC_SHA2_512_256)));
+                                        SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA1_96,
+                                        SaProposal.INTEGRITY_ALGORITHM_AES_XCBC_96,
+                                        SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA2_256_128,
+                                        SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA2_384_192,
+                                        SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA2_512_256)));
 
         VALID_PRF_ALGOS =
                 Collections.unmodifiableSet(
                         new HashSet<>(
                                 Arrays.asList(
-                                        CarrierConfigManager.Iwlan.PSEUDORANDOM_FUNCTION_HMAC_SHA1,
-                                        CarrierConfigManager.Iwlan
-                                                .PSEUDORANDOM_FUNCTION_AES128_XCBC,
-                                        CarrierConfigManager.Iwlan.PSEUDORANDOM_FUNCTION_SHA2_256,
-                                        CarrierConfigManager.Iwlan.PSEUDORANDOM_FUNCTION_SHA2_384,
-                                        CarrierConfigManager.Iwlan
-                                                .PSEUDORANDOM_FUNCTION_SHA2_512)));
+                                        SaProposal.PSEUDORANDOM_FUNCTION_HMAC_SHA1,
+                                        SaProposal.PSEUDORANDOM_FUNCTION_AES128_XCBC,
+                                        SaProposal.PSEUDORANDOM_FUNCTION_SHA2_256,
+                                        SaProposal.PSEUDORANDOM_FUNCTION_SHA2_384,
+                                        SaProposal.PSEUDORANDOM_FUNCTION_SHA2_512)));
     }
 
     private final EpdgSelector.EpdgSelectorCallback mSelectorCallback =
@@ -835,7 +831,7 @@ public class EpdgTunnelManager {
         for (int encryptionAlgo : encryptionAlgos) {
             validateConfig(encryptionAlgo, VALID_ENCRYPTION_ALGOS, CONFIG_TYPE_ENCRYPT_ALGO);
 
-            if (encryptionAlgo == CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CBC) {
+            if (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_CBC) {
                 int[] aesCbcKeyLens =
                         getConfig(
                                 CarrierConfigManager.Iwlan
@@ -847,7 +843,7 @@ public class EpdgTunnelManager {
                 }
             }
 
-            if (encryptionAlgo == CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CTR) {
+            if (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_CTR) {
                 int[] aesCtrKeyLens =
                         getConfig(
                                 CarrierConfigManager.Iwlan
@@ -910,7 +906,7 @@ public class EpdgTunnelManager {
         for (int encryptionAlgo : encryptionAlgos) {
             if (validateConfig(encryptionAlgo, VALID_ENCRYPTION_ALGOS, CONFIG_TYPE_ENCRYPT_ALGO)) {
                 if (ChildSaProposal.getSupportedEncryptionAlgorithms().contains(encryptionAlgo)) {
-                    if (encryptionAlgo == CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CBC) {
+                    if (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_CBC) {
                         int[] aesCbcKeyLens =
                                 getConfig(
                                         CarrierConfigManager.Iwlan
@@ -924,7 +920,7 @@ public class EpdgTunnelManager {
                         }
                     }
 
-                    if (encryptionAlgo == CarrierConfigManager.Iwlan.ENCRYPTION_ALGORITHM_AES_CTR) {
+                    if (encryptionAlgo == SaProposal.ENCRYPTION_ALGORITHM_AES_CTR) {
                         int[] aesCtrKeyLens =
                                 getConfig(
                                         CarrierConfigManager.Iwlan
