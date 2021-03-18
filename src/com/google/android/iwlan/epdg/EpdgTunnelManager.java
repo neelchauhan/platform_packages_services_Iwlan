@@ -59,7 +59,7 @@ import android.support.annotation.NonNull;
 import android.telephony.CarrierConfigManager;
 import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
-import android.telephony.data.SliceInfo;
+import android.telephony.data.NetworkSliceInfo;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -222,15 +222,15 @@ public class EpdgTunnelManager {
         private List<InetAddress> mPcscfAddrList;
         private List<InetAddress> mDnsAddrList;
         private List<LinkAddress> mInternalAddrList;
-        private SliceInfo mSliceInfo;
+        private NetworkSliceInfo mSliceInfo;
         private boolean mIsBackoffTimeValid = false;
         private long mBackoffTime;
 
-        public SliceInfo getSliceInfo() {
+        public NetworkSliceInfo getSliceInfo() {
             return mSliceInfo;
         }
 
-        public void setSliceInfo(SliceInfo si) {
+        public void setSliceInfo(NetworkSliceInfo si) {
             mSliceInfo = si;
         }
 
@@ -363,7 +363,7 @@ public class EpdgTunnelManager {
                 for (Ike3gppData payload : payloads) {
                     if (payload.getDataType() == DATA_TYPE_NOTIFY_N1_MODE_INFORMATION) {
                         Log.d(TAG, "Got payload DATA_TYPE_NOTIFY_N1_MODE_INFORMATION");
-                        SliceInfo si =
+                        NetworkSliceInfo si =
                                 NetworkSliceSelectionAssistanceInformation.getSliceInfo(
                                         ((Ike3gppN1ModeInformation) payload).getSnssai());
                         if (si != null) {

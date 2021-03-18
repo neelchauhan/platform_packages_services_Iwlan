@@ -43,7 +43,7 @@ import android.telephony.data.DataCallResponse;
 import android.telephony.data.DataProfile;
 import android.telephony.data.DataService;
 import android.telephony.data.DataServiceCallback;
-import android.telephony.data.SliceInfo;
+import android.telephony.data.NetworkSliceInfo;
 import android.telephony.data.TrafficDescriptor;
 import android.util.Log;
 
@@ -562,7 +562,7 @@ public class IwlanDataService extends DataService {
                 int reason,
                 @Nullable LinkProperties linkProperties,
                 @IntRange(from = 0, to = 15) int pduSessionId,
-                @Nullable SliceInfo sliceInfo,
+                @Nullable NetworkSliceInfo sliceInfo,
                 @Nullable TrafficDescriptor trafficDescriptor,
                 boolean matchAllRuleAllowed,
                 @NonNull DataServiceCallback callback) {
