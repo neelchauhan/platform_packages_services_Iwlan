@@ -12,6 +12,7 @@
   <uses-permission android:name="android.permission.READ_PRIVILEGED_PHONE_STATE" />
   <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
   <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
   <protected-broadcast android:name="IkeAlarmReceiver.ACTION_DELETE_CHILD" />
   <protected-broadcast android:name="IkeAlarmReceiver.ACTION_REKEY_CHILD" />
