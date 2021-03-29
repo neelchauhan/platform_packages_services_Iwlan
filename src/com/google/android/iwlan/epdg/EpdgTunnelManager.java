@@ -23,6 +23,7 @@ import static android.system.OsConstants.AF_INET6;
 
 import android.content.Context;
 import android.net.InetAddresses;
+import android.net.IpPrefix;
 import android.net.IpSecManager;
 import android.net.IpSecTransform;
 import android.net.LinkAddress;
@@ -216,12 +217,16 @@ public class EpdgTunnelManager {
                 }
             };
 
-    private static class TunnelConfig {
+    @VisibleForTesting
+    class TunnelConfig {
         @NonNull final TunnelCallback mTunnelCallback;
         // TODO: Change this to TunnelLinkProperties after removing autovalue
         private List<InetAddress> mPcscfAddrList;
         private List<InetAddress> mDnsAddrList;
         private List<LinkAddress> mInternalAddrList;
+
+        private InetAddress mSrcIpv6Address;
+        private int mSrcIpv6AddressPrefixLen;
         private NetworkSliceInfo mSliceInfo;
         private boolean mIsBackoffTimeValid = false;
         private long mBackoffTime;
@@ -251,10 +256,16 @@ public class EpdgTunnelManager {
         IwlanError mError;
         private IpSecManager.IpSecTunnelInterface mIface;
 
-        public TunnelConfig(IkeSession ikeSession, TunnelCallback tunnelCallback) {
+        public TunnelConfig(
+                IkeSession ikeSession,
+                TunnelCallback tunnelCallback,
+                InetAddress srcIpv6Addr,
+                int srcIpv6PrefixLength) {
             mTunnelCallback = tunnelCallback;
             mIkeSession = ikeSession;
             mError = new IwlanError(IwlanError.NO_ERROR);
+            mSrcIpv6Address = srcIpv6Addr;
+            mSrcIpv6AddressPrefixLen = srcIpv6PrefixLength;
         }
 
         @NonNull
@@ -282,8 +293,42 @@ public class EpdgTunnelManager {
             return mInternalAddrList;
         }
 
+        boolean isPrefixSameAsSrcIP(LinkAddress laddr) {
+            if (laddr.isIpv6() && (laddr.getPrefixLength() == mSrcIpv6AddressPrefixLen)) {
+                IpPrefix assignedPrefix = new IpPrefix(laddr.getAddress(), laddr.getPrefixLength());
+                IpPrefix srcPrefix = new IpPrefix(mSrcIpv6Address, mSrcIpv6AddressPrefixLen);
+                if (assignedPrefix.equals(srcPrefix)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         public void setInternalAddrList(List<LinkAddress> internalAddrList) {
-            mInternalAddrList = internalAddrList;
+            mInternalAddrList = new ArrayList<LinkAddress>(internalAddrList);
+            if (getSrcIpv6Address() != null) {
+                // check if we can reuse src ipv6 address (i.e if prefix is same)
+                for (LinkAddress assignedAddr : internalAddrList) {
+                    if (isPrefixSameAsSrcIP(assignedAddr)) {
+                        // the assigned IPv6 address is same as pre-Handover IPv6
+                        // addr. Just reuse the pre-Handover Address so the IID is
+                        // preserved
+                        mInternalAddrList.remove(assignedAddr);
+
+                        // add original address
+                        mInternalAddrList.add(
+                                new LinkAddress(mSrcIpv6Address, mSrcIpv6AddressPrefixLen));
+
+                        Log.d(
+                                TAG,
+                                "Network assigned IP replaced OLD:"
+                                        + internalAddrList
+                                        + " NEW:"
+                                        + mInternalAddrList);
+                        break;
+                    }
+                }
+            }
         }
 
         @NonNull
@@ -305,6 +350,14 @@ public class EpdgTunnelManager {
 
         public void setIface(IpSecManager.IpSecTunnelInterface iface) {
             mIface = iface;
+        }
+
+        public InetAddress getSrcIpv6Address() {
+            return mSrcIpv6Address;
+        }
+
+        public int getSrcIpv6AddressPrefixLen() {
+            return mSrcIpv6AddressPrefixLen;
         }
     }
 
@@ -404,7 +457,7 @@ public class EpdgTunnelManager {
 
             IpSecManager.IpSecTunnelInterface tunnelInterface = tunnelConfig.getIface();
 
-            for (LinkAddress address : sessionConfiguration.getInternalAddresses()) {
+            for (LinkAddress address : tunnelConfig.getInternalAddrList()) {
                 try {
                     tunnelInterface.addAddress(address.getAddress(), address.getPrefixLength());
                 } catch (IOException e) {
@@ -592,7 +645,13 @@ public class EpdgTunnelManager {
                                 getTmIkeSessionCallback(apnName),
                                 new TmChildSessionCallBack(apnName));
 
-        putApnNameToTunnelConfig(apnName, ikeSession, tunnelCallback);
+        boolean isSrcIpv6Present = setupRequest.srcIpv6Address().isPresent();
+        putApnNameToTunnelConfig(
+                apnName,
+                ikeSession,
+                tunnelCallback,
+                isSrcIpv6Present ? setupRequest.srcIpv6Address().get() : null,
+                setupRequest.srcIpv6AddressPrefixLength());
     }
 
     /**
@@ -1549,8 +1608,14 @@ public class EpdgTunnelManager {
 
     @VisibleForTesting
     void putApnNameToTunnelConfig(
-            String apnName, IkeSession ikeSession, TunnelCallback tunnelCallback) {
-        mApnNameToTunnelConfig.put(apnName, new TunnelConfig(ikeSession, tunnelCallback));
+            String apnName,
+            IkeSession ikeSession,
+            TunnelCallback tunnelCallback,
+            InetAddress srcIpv6Addr,
+            int srcIPv6AddrPrefixLen) {
+        mApnNameToTunnelConfig.put(
+                apnName,
+                new TunnelConfig(ikeSession, tunnelCallback, srcIpv6Addr, srcIPv6AddrPrefixLen));
     }
 
     @VisibleForTesting
