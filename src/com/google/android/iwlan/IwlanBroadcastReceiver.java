@@ -42,6 +42,7 @@ public class IwlanBroadcastReceiver extends BroadcastReceiver {
         }
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
+        intentFilter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
         context.registerReceiver(getInstance(), intentFilter);
         mIsReceiverRegistered = true;
     }
