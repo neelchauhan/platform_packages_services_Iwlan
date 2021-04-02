@@ -54,6 +54,8 @@ import com.google.android.iwlan.epdg.EpdgTunnelManager;
 import com.google.android.iwlan.epdg.TunnelLinkProperties;
 import com.google.android.iwlan.epdg.TunnelSetupRequest;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -239,6 +241,29 @@ public class IwlanDataService extends DataService {
 
             public boolean getIsHandover() {
                 return mIsHandover;
+            }
+
+            @Override
+            public String toString() {
+                StringBuilder sb = new StringBuilder();
+                String tunnelState = "UNKNOWN";
+                switch (mState) {
+                    case TUNNEL_DOWN:
+                        tunnelState = "DOWN";
+                        break;
+                    case TUNNEL_IN_BRINGUP:
+                        tunnelState = "IN BRINGUP";
+                        break;
+                    case TUNNEL_UP:
+                        tunnelState = "UP";
+                        break;
+                    case TUNNEL_IN_BRINGDOWN:
+                        tunnelState = "IN BRINGDOWN";
+                        break;
+                }
+                sb.append("Current State of this tunnel: " + mState + " " + tunnelState);
+                sb.append("\nTunnel state is in Handover: " + mIsHandover);
+                return sb.toString();
             }
         }
 
@@ -823,6 +848,29 @@ public class IwlanDataService extends DataService {
             IwlanEventListener.getInstance(mContext, getSlotIndex()).removeEventListener(mHandler);
             mHandlerThread.quit();
         }
+
+        public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+            pw.println("---- IwlanDataServiceProvider[" + getSlotIndex() + "] ----");
+            boolean isDDS = IwlanHelper.isDefaultDataSlot(mContext, getSlotIndex());
+            boolean isCSTEnabled = IwlanHelper.isCrossSimCallingEnabled(mContext, getSlotIndex());
+            pw.println("isDefaultDataSub: " + isDDS + " isCrossSimEnabled: " + isCSTEnabled);
+            pw.println(
+                    "isNetworkConnected: "
+                            + isNetworkConnected(isDDS, isCSTEnabled)
+                            + " Wfc enabled: "
+                            + mWfcEnabled);
+            synchronized (mTunnelStateForApn) {
+                for (Map.Entry<String, TunnelState> entry : mTunnelStateForApn.entrySet()) {
+                    pw.println("++++");
+                    pw.println("Tunnel state for APN: " + entry.getKey());
+                    pw.println(entry.getValue());
+                    pw.println("++++");
+                }
+            }
+            EpdgTunnelManager.getInstance(mContext, getSlotIndex()).dump(fd, pw, args);
+            ErrorPolicyManager.getInstance(mContext, getSlotIndex()).dump(fd, pw, args);
+            pw.println("-------------------------------------");
+        }
     }
 
     @VisibleForTesting
@@ -864,8 +912,8 @@ public class IwlanDataService extends DataService {
 
         if (!networkConnected) {
             for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
-                //once network is disconnect, even NAT KA offload fails
-                //so we should force close all tunnels
+                // once network is disconnect, even NAT KA offload fails
+                // so we should force close all tunnels
                 dp.forceCloseTunnels();
             }
         } else {
@@ -981,5 +1029,22 @@ public class IwlanDataService extends DataService {
             dp.forceCloseTunnels();
         }
         return super.onUnbind(intent);
+    }
+
+    @Override
+    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        String transport = "UNSPECIFIED";
+        if (sDefaultDataTransport == Transport.MOBILE) {
+            transport = "CELLULAR";
+        } else if (sDefaultDataTransport == Transport.WIFI) {
+            transport = "WIFI";
+        }
+        pw.println("Default transport: " + transport);
+        for (IwlanDataServiceProvider provider : sIwlanDataServiceProviderList) {
+            pw.println();
+            provider.dump(fd, pw, args);
+            pw.println();
+            pw.println();
+        }
     }
 }

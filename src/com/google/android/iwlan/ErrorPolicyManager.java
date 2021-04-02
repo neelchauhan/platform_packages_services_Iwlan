@@ -36,9 +36,11 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -395,6 +397,15 @@ public class ErrorPolicyManager {
                 policy.log();
             }
         }
+    }
+
+    public synchronized void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        pw.println("---- ErrorPolicyManager ----");
+        for (Map.Entry<String, ErrorInfo> entry : mLastErrorForApn.entrySet()) {
+            pw.print("APN: " + entry.getKey() + " IwlanError: " + entry.getValue().getError());
+            pw.println(" currentRetryTime: " + entry.getValue().getCurrentRetryTime());
+        }
+        pw.println("----------------------------");
     }
 
     private ErrorPolicyManager(Context context, int slotId) {

@@ -69,7 +69,9 @@ import com.google.android.iwlan.ErrorPolicyManager;
 import com.google.android.iwlan.IwlanError;
 import com.google.android.iwlan.IwlanHelper;
 
+import java.io.FileDescriptor;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -1687,5 +1689,11 @@ public class EpdgTunnelManager {
     @VisibleForTesting
     boolean canBringUpTunnel(String apnName) {
         return ErrorPolicyManager.getInstance(mContext, mSlotId).canBringUpTunnel(apnName);
+    }
+
+    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        pw.println("---- EpdgTunnelManager ----");
+        pw.println("mIsEpdgAddressSelected: " + mIsEpdgAddressSelected);
+        pw.println("---------------------------");
     }
 }
