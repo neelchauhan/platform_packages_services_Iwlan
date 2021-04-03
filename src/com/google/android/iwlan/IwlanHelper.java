@@ -82,6 +82,12 @@ public class IwlanHelper {
         return subid;
     }
 
+    public static int getCarrierId(Context context, int slotId) {
+        TelephonyManager tm = context.getSystemService(TelephonyManager.class);
+        tm = tm.createForSubscriptionId(IwlanHelper.getSubId(context, slotId));
+        return tm.getSimCarrierId();
+    }
+
     private static SubscriptionInfo getSubInfo(Context context, int slotId)
             throws IllegalStateException {
         SubscriptionManager sm = context.getSystemService(SubscriptionManager.class);
