@@ -1225,7 +1225,6 @@ public class EpdgTunnelManagerTest {
     @Test
     public void testTunnelSetupRequestParams() throws Exception {
         String testApnName = "www.xyz.com";
-        Network testNetwork = new Network(123);
         Inet6Address testAddressV6 = Inet6Address.getByAddress("25.25.25.25", new byte[16], 0);
         Inet4Address testAddressV4 = (Inet4Address) Inet4Address.getByName("30.30.30.30");
         int pduSessionId = 5;
@@ -1237,7 +1236,7 @@ public class EpdgTunnelManagerTest {
         TunnelSetupRequest tsr =
                 TunnelSetupRequest.builder()
                         .setApnName(testApnName)
-                        .setNetwork(testNetwork)
+                        .setNetwork(mMockNetwork)
                         .setApnIpProtocol(ApnSetting.PROTOCOL_IPV4V6)
                         .setSrcIpv6Address(testAddressV6)
                         .setSrcIpv6AddressPrefixLength(ipv6AddressLen)
@@ -1253,7 +1252,7 @@ public class EpdgTunnelManagerTest {
                         anyInt(),
                         eq(isRoaming),
                         eq(isEmergency),
-                        eq(testNetwork),
+                        eq(mMockNetwork),
                         any(EpdgSelector.EpdgSelectorCallback.class)))
                 .thenReturn(new IwlanError(IwlanError.NO_ERROR));
 
@@ -1277,7 +1276,7 @@ public class EpdgTunnelManagerTest {
                         anyInt(), // only Ipv6 address is added
                         eq(isRoaming),
                         eq(isEmergency),
-                        eq(testNetwork),
+                        eq(mMockNetwork),
                         any(EpdgSelector.EpdgSelectorCallback.class));
 
         ArrayList<InetAddress> ipList = new ArrayList<>();
@@ -1308,7 +1307,7 @@ public class EpdgTunnelManagerTest {
         assertEquals(ikeId.fqdn, testApnName);
 
         // verify Network
-        assertEquals(ikeSessionParams.getConfiguredNetwork(), testNetwork);
+        assertEquals(ikeSessionParams.getConfiguredNetwork(), mMockNetwork);
 
         // verify requestPcscf (true) with Apn protocol IPV6
         // it should add the pcscf config requests of type ConfigRequestIpv6PcscfServer and
