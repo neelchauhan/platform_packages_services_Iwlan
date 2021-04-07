@@ -336,7 +336,7 @@ public class EpdgTunnelManager {
         @Override
         public void onClosedExceptionally(IkeException exception) {
             Log.d(TAG, "Ike session onClosedExceptionally for apn: " + mApnName);
-            onClosedWithException(exception, mApnName, EVENT_IKE_SESSION_CLOSED);
+            onSessionClosedWithException(exception, mApnName, EVENT_IKE_SESSION_CLOSED);
         }
 
         @Override
@@ -435,7 +435,7 @@ public class EpdgTunnelManager {
         @Override
         public void onClosedExceptionally(IkeException exception) {
             Log.d(TAG, "onClosedExceptionally child session for apn: " + mApnName);
-            onClosedWithException(exception, mApnName, EVENT_CHILD_SESSION_CLOSED);
+            onSessionClosedWithException(exception, mApnName, EVENT_CHILD_SESSION_CLOSED);
         }
 
         @Override
@@ -992,7 +992,8 @@ public class EpdgTunnelManager {
                 .build();
     }
 
-    private void onClosedWithException(IkeException exception, String apnName, int sessionType) {
+    private void onSessionClosedWithException(
+            IkeException exception, String apnName, int sessionType) {
         Log.d(
                 TAG,
                 "Closing tunnel with exception for apn: "
