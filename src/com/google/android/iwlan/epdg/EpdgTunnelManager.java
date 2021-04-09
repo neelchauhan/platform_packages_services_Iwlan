@@ -1158,6 +1158,10 @@ public class EpdgTunnelManager {
                 case EVENT_EPDG_ADDRESS_SELECTION_REQUEST_COMPLETE:
                     EpdgSelectorResult selectorResult = (EpdgSelectorResult) msg.obj;
                     printRequestQueue("EVENT_EPDG_ADDRESS_SELECTION_REQUEST_COMPLETE");
+                    if ((tunnelRequestWrapper = mRequestQueue.peek()) == null) {
+                      Log.d(TAG, "Empty request queue");
+                      break;
+                    }
 
                     if (selectorResult.getEpdgError().getErrorType() == IwlanError.NO_ERROR
                             && (mValidEpdgAddrList = selectorResult.getValidIpList()) != null
@@ -1166,7 +1170,6 @@ public class EpdgTunnelManager {
                                 TAG,
                                 "mValidEpdgAddrList: "
                                         + Arrays.toString(mValidEpdgAddrList.toArray()));
-                        tunnelRequestWrapper = mRequestQueue.peek();
                         mCurrentNumberOfRetries++;
                         onBringUpTunnel(
                                 tunnelRequestWrapper.getSetupRequest(),
