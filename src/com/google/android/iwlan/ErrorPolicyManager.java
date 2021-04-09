@@ -546,9 +546,9 @@ public class ErrorPolicyManager {
                 if (times.length == 2
                         && TextUtils.isDigitsOnly(times[0])
                         && TextUtils.isDigitsOnly(times[1])) {
-                    int time =
+                    ret.add(
                             Integer.parseInt(times[0])
-                                    + (int) (Math.random() * Long.parseLong(times[1]));
+                                    + (int) (Math.random() * Long.parseLong(times[1])));
                 } else {
                     throw new IllegalArgumentException(
                             "Randomized Retry time is not in acceptable format");
@@ -565,7 +565,7 @@ public class ErrorPolicyManager {
         List<Integer> ret = new ArrayList<>();
         for (int i = 0; i < unthrottlingEvents.length(); i++) {
             int event =
-              IwlanEventListener.getUnthrottlingEvent(unthrottlingEvents.getString(i).trim());
+                    IwlanEventListener.getUnthrottlingEvent(unthrottlingEvents.getString(i).trim());
             if (event == IwlanEventListener.UNKNOWN_EVENT) {
                 throw new IllegalArgumentException(
                         "Unexpected unthrottlingEvent " + unthrottlingEvents.getString(i));
