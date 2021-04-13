@@ -28,9 +28,7 @@ import static org.mockito.Mockito.spy;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.AssetManager;
-import android.net.ipsec.ike.exceptions.AuthenticationFailedException;
-import android.net.ipsec.ike.exceptions.ChildSaNotFoundException;
-import android.net.ipsec.ike.exceptions.UnrecognizedIkeProtocolException;
+import android.net.ipsec.ike.exceptions.IkeProtocolException;
 import android.os.PersistableBundle;
 import android.telephony.CarrierConfigManager;
 import android.telephony.DataFailCause;
@@ -92,6 +90,25 @@ public class ErrorPolicyManagerTest {
         mErrorPolicyManager.releaseInstance();
     }
 
+    private static IwlanError buildIwlanIkeProtocolError(int errorCode, byte[] errorData) {
+        final IkeProtocolException exception = mock(IkeProtocolException.class);
+        when(exception.getErrorType()).thenReturn(errorCode);
+        when(exception.getErrorData()).thenReturn(errorData);
+        return new IwlanError(exception);
+    }
+
+    private static IwlanError buildIwlanIkeProtocolError(int errorCode) {
+        return buildIwlanIkeProtocolError(errorCode, new byte[0]);
+    }
+
+    private static IwlanError buildIwlanIkeAuthFailedError() {
+        return buildIwlanIkeProtocolError(IkeProtocolException.ERROR_TYPE_AUTHENTICATION_FAILED);
+    }
+
+    private static IwlanError buildIwlanIkeChildSaNotFoundError() {
+        return buildIwlanIkeProtocolError(IkeProtocolException.ERROR_TYPE_CHILD_SA_NOT_FOUND);
+    }
+
     @Test
     public void testValidCarrierConfig() throws Exception {
         String apn = "ims";
@@ -126,7 +143,7 @@ public class ErrorPolicyManagerTest {
         sleep(1000);
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4,8,16
-        IwlanError iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
+        IwlanError iwlanError = buildIwlanIkeAuthFailedError();
         long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(4, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
@@ -137,8 +154,7 @@ public class ErrorPolicyManagerTest {
         assertEquals(86400, time);
 
         // Validate the range error detail.
-        iwlanError =
-                new IwlanError(new UnrecognizedIkeProtocolException(9030, new byte[] {0x00, 0x01}));
+        iwlanError = buildIwlanIkeProtocolError(9030, new byte[] {0x00, 0x01});
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(4, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
@@ -159,7 +175,7 @@ public class ErrorPolicyManagerTest {
 
         // Fallback case GENERIC_PROTOCOL_ERROR_TYPE(44) and retryArray is 5, 10, -1 as in
         // DEFAULT_CONFIG
-        iwlanError = new IwlanError(new ChildSaNotFoundException(10));
+        iwlanError = buildIwlanIkeChildSaNotFoundError();
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(5, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
@@ -199,7 +215,7 @@ public class ErrorPolicyManagerTest {
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 5, 10, 15 as it will fallback due to failed
         // parsing
-        IwlanError iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
+        IwlanError iwlanError = buildIwlanIkeAuthFailedError();
         long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(5, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
@@ -245,7 +261,7 @@ public class ErrorPolicyManagerTest {
         mErrorPolicyManager.logErrorPolicies();
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4, 8, 16
-        IwlanError iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
+        IwlanError iwlanError = buildIwlanIkeAuthFailedError();
         long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(4, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
@@ -257,7 +273,7 @@ public class ErrorPolicyManagerTest {
 
         // IKE_PROTOCOL_ERROR_TYPE(44) and retryArray = 0 as it will fallback to
         // IKE_PROTOCOL_ERROR_TYPE generic fallback first.
-        iwlanError = new IwlanError(new ChildSaNotFoundException(10));
+        iwlanError = buildIwlanIkeChildSaNotFoundError();
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(0, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
@@ -297,7 +313,7 @@ public class ErrorPolicyManagerTest {
         sleep(1000);
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4,8,16
-        IwlanError iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
+        IwlanError iwlanError = buildIwlanIkeAuthFailedError();
         long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(4, time);
 
@@ -349,7 +365,7 @@ public class ErrorPolicyManagerTest {
         sleep(1000);
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4,8,16
-        IwlanError iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
+        IwlanError iwlanError = buildIwlanIkeAuthFailedError();
         long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(4, time);
 
@@ -395,7 +411,7 @@ public class ErrorPolicyManagerTest {
         sleep(1000);
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 6, 12, 24
-        IwlanError iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
+        IwlanError iwlanError = buildIwlanIkeAuthFailedError();
         long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(6, time);
 
@@ -409,7 +425,7 @@ public class ErrorPolicyManagerTest {
         boolean bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
         assertTrue(bringUpTunnel);
 
-        iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
+        iwlanError = buildIwlanIkeAuthFailedError();
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(6, time);
     }
@@ -446,7 +462,7 @@ public class ErrorPolicyManagerTest {
         sleep(1000);
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 6, 12, 24
-        IwlanError iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
+        IwlanError iwlanError = buildIwlanIkeAuthFailedError();
         long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(6, time);
 
@@ -460,7 +476,7 @@ public class ErrorPolicyManagerTest {
         boolean bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
         assertTrue(bringUpTunnel);
 
-        iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
+        iwlanError = buildIwlanIkeAuthFailedError();
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(6, time);
     }
@@ -497,7 +513,7 @@ public class ErrorPolicyManagerTest {
         sleep(1000);
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4,8,16
-        IwlanError iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
+        IwlanError iwlanError = buildIwlanIkeAuthFailedError();
         long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(4, time);
 
@@ -511,7 +527,7 @@ public class ErrorPolicyManagerTest {
         boolean bringUpTunnel = mErrorPolicyManager.canBringUpTunnel(apn);
         assertTrue(bringUpTunnel);
 
-        iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
+        iwlanError = buildIwlanIkeAuthFailedError();
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(4, time);
     }
@@ -550,14 +566,13 @@ public class ErrorPolicyManagerTest {
         sleep(1000);
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4,8,16
-        IwlanError iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
+        IwlanError iwlanError = buildIwlanIkeAuthFailedError();
         long time = mErrorPolicyManager.reportIwlanError(apn1, iwlanError);
         assertEquals(4, time);
 
         iwlanError =
-                new IwlanError(
-                        new UnrecognizedIkeProtocolException(
-                                8192 /*PDN_CONNECTION_REJECTION*/, new byte[] {0x00, 0x01}));
+                buildIwlanIkeProtocolError(
+                        8192 /*PDN_CONNECTION_REJECTION*/, new byte[] {0x00, 0x01});
         time = mErrorPolicyManager.reportIwlanError(apn2, iwlanError);
         assertEquals(5, time);
 
@@ -608,7 +623,7 @@ public class ErrorPolicyManagerTest {
         sleep(1000);
 
         // IKE_PROTOCOL_ERROR_TYPE(24) and retryArray = 4,8,16
-        IwlanError iwlanError = new IwlanError(new AuthenticationFailedException("fail"));
+        IwlanError iwlanError = buildIwlanIkeAuthFailedError();
         long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError, 2);
 
         time = mErrorPolicyManager.getCurrentRetryTimeMs(apn);
