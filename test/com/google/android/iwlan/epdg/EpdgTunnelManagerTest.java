@@ -40,7 +40,7 @@ import android.net.ipsec.ike.IkeSessionParams;
 import android.net.ipsec.ike.TunnelModeChildSessionParams;
 import android.net.ipsec.ike.exceptions.IkeException;
 import android.net.ipsec.ike.exceptions.IkeInternalException;
-import android.net.ipsec.ike.exceptions.InvalidIkeSpiException;
+import android.net.ipsec.ike.exceptions.IkeProtocolException;
 import android.net.ipsec.ike.ike3gpp.Ike3gppBackoffTimer;
 import android.net.ipsec.ike.ike3gpp.Ike3gppData;
 import android.net.ipsec.ike.ike3gpp.Ike3gppExtension;
@@ -1038,7 +1038,12 @@ public class EpdgTunnelManagerTest {
     @Test
     public void testReportIwlanErrorIkeProtocolException() throws Exception {
         String testApnName = "www.xyz.com";
-        InvalidIkeSpiException mockException = new InvalidIkeSpiException();
+
+        IkeProtocolException mockException = mock(IkeProtocolException.class);
+        doReturn(IkeProtocolException.ERROR_TYPE_INVALID_IKE_SPI)
+                .when(mockException)
+                .getErrorType();
+        doReturn(new byte[0]).when(mockException).getErrorData();
         IwlanError error = new IwlanError(mockException);
 
         doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(testApnName), eq(error));
