@@ -26,6 +26,7 @@ import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
 import android.telephony.DataFailCause;
 import android.telephony.data.DataService;
+import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -156,6 +157,10 @@ public class ErrorPolicyManager {
 
     private HandlerThread mHandlerThread;
     @VisibleForTesting Handler mHandler;
+
+    private int carrierId = TelephonyManager.UNKNOWN_CARRIER_ID;
+
+    private String carrierConfigErrorPolicyString;
 
     @VisibleForTesting
     static final String KEY_ERROR_POLICY_CONFIG_STRING = "iwlan.key_error_policy_config_string";
@@ -422,7 +427,8 @@ public class ErrorPolicyManager {
             throw new AssertionError(e);
         }
 
-        readFromCarrierConfig();
+        carrierConfigErrorPolicyString = null;
+        readFromCarrierConfig(IwlanHelper.getCarrierId(mContext, mSlotId));
         updateUnthrottlingEvents();
     }
 
@@ -674,7 +680,7 @@ public class ErrorPolicyManager {
      * CARRIER_CONFIG_CHANGED event. There is no race condition between both as we register for the
      * events after the calling this method.
      */
-    private synchronized void readFromCarrierConfig() {
+    private synchronized void readFromCarrierConfig(int currentCarrierId) {
         String carrierConfigErrorPolicy =
                 (String) IwlanHelper.getConfig(KEY_ERROR_POLICY_CONFIG_STRING, mContext, mSlotId);
         if (carrierConfigErrorPolicy == null) {
@@ -685,6 +691,8 @@ public class ErrorPolicyManager {
             Map<String, List<ErrorPolicy>> errorPolicies =
                     readErrorPolicies(new JSONArray(carrierConfigErrorPolicy));
             if (errorPolicies.size() > 0) {
+                carrierConfigErrorPolicyString = carrierConfigErrorPolicy;
+                carrierId = currentCarrierId;
                 mCarrierConfigPolicies.clear();
                 mCarrierConfigPolicies.putAll(errorPolicies);
             }
@@ -693,6 +701,10 @@ public class ErrorPolicyManager {
                     LOG_TAG,
                     "Unable to parse the ErrorPolicy from CarrierConfig\n"
                             + carrierConfigErrorPolicy);
+            if (mCarrierConfigPolicies != null) {
+                mCarrierConfigPolicies.clear();
+            }
+            carrierConfigErrorPolicyString = null;
             e.printStackTrace();
         }
     }
@@ -957,6 +969,17 @@ public class ErrorPolicyManager {
         }
     }
 
+    private boolean isValidCarrierConfigChangedEvent(int currentCarrierId) {
+        String errorPolicyConfig =
+                (String) IwlanHelper.getConfig(KEY_ERROR_POLICY_CONFIG_STRING, mContext, mSlotId);
+        boolean isValidEvent =
+                (currentCarrierId != carrierId)
+                        || (carrierConfigErrorPolicyString == null)
+                        || (errorPolicyConfig != null
+                                && !carrierConfigErrorPolicyString.equals(errorPolicyConfig));
+        return isValidEvent;
+    }
+
     private final class EpmHandler extends Handler {
         private final String TAG = EpmHandler.class.getSimpleName();
 
@@ -966,9 +989,13 @@ public class ErrorPolicyManager {
             switch (msg.what) {
                 case IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT:
                     Log.d(TAG, "On CARRIER_CONFIG_CHANGED_EVENT");
-                    unthrottleLastErrorOnEvent(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT);
-                    readFromCarrierConfig();
-                    updateUnthrottlingEvents();
+                    int currentCarrierId = IwlanHelper.getCarrierId(mContext, mSlotId);
+                    if (isValidCarrierConfigChangedEvent(currentCarrierId)) {
+                        Log.d(TAG, "Unthrottle last error and read from carrier config");
+                        unthrottleLastErrorOnEvent(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT);
+                        readFromCarrierConfig(currentCarrierId);
+                        updateUnthrottlingEvents();
+                    }
                     break;
                 case IwlanEventListener.APM_ENABLE_EVENT:
                 case IwlanEventListener.APM_DISABLE_EVENT:
