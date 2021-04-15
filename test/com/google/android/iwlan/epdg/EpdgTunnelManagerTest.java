@@ -1312,7 +1312,7 @@ public class EpdgTunnelManagerTest {
         assertEquals(ikeId.fqdn, testApnName);
 
         // verify Network
-        assertEquals(ikeSessionParams.getConfiguredNetwork(), mMockNetwork);
+        assertEquals(ikeSessionParams.getNetwork(), mMockNetwork);
 
         // verify requestPcscf (true) with Apn protocol IPV6
         // it should add the pcscf config requests of type ConfigRequestIpv6PcscfServer and
