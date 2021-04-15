@@ -34,6 +34,7 @@ import android.telephony.CarrierConfigManager;
 import android.telephony.DataFailCause;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
+import android.telephony.TelephonyManager;
 import android.telephony.data.DataService;
 
 import androidx.test.InstrumentationRegistry;
@@ -56,10 +57,12 @@ public class ErrorPolicyManagerTest {
     private ErrorPolicyManager mErrorPolicyManager;
     private static final int DEFAULT_SLOT_INDEX = 0;
     private static final int DEFAULT_SUBID = 0;
+    private static final int TEST_CARRIER_ID = 1;
 
     @Mock private Context mMockContext;
     @Mock CarrierConfigManager mMockCarrierConfigManager;
     @Mock SubscriptionManager mMockSubscriptionManager;
+    @Mock TelephonyManager mMockTelephonyManager;
     @Mock SubscriptionInfo mMockSubscriptionInfo;
     @Mock DataService.DataServiceProvider mMockDataServiceProvider;
     @Mock private ContentResolver mMockContentResolver;
@@ -685,6 +688,11 @@ public class ErrorPolicyManagerTest {
         doReturn(mMockSubscriptionManager)
                 .when(mMockContext)
                 .getSystemService(eq(SubscriptionManager.class));
+        doReturn(mMockTelephonyManager).when(mMockContext).getSystemService(TelephonyManager.class);
+        doReturn(mMockTelephonyManager)
+                .when(mMockTelephonyManager)
+                .createForSubscriptionId(anyInt());
+        doReturn(TEST_CARRIER_ID).when(mMockTelephonyManager).getSimCarrierId();
         SubscriptionInfo mockSubInfo = mock(SubscriptionInfo.class);
         doReturn(mockSubInfo)
                 .when(mMockSubscriptionManager)
