@@ -347,8 +347,7 @@ public class IwlanDataService extends DataService {
                         // Ignore this during tunnel bring down.
                         if (error.getErrorType() != IwlanError.NO_ERROR
                                 && error.getErrorType() != IwlanError.IKE_INTERNAL_IO_EXCEPTION) {
-                            throw new AssertionError(
-                                    "Unexpected error during tunnel bring down: " + error);
+                            Log.e(SUB_TAG, "Unexpected error during tunnel bring down: " + error);
                         }
 
                         deliverCallback(
