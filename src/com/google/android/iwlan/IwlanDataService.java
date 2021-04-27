@@ -86,6 +86,15 @@ public class IwlanDataService extends DataService {
 
     private static Transport sDefaultDataTransport = Transport.UNSPECIFIED_NETWORK;
 
+    enum LinkProtocolType {
+        UNKNOWN,
+        IPV4,
+        IPV6,
+        IPV4V6;
+    }
+
+    private static LinkProtocolType sLinkProtocolType = LinkProtocolType.UNKNOWN;
+
     // TODO: see if network monitor callback impl can be shared between dataservice and
     // networkservice
     static class IwlanNetworkMonitorCallback extends ConnectivityManager.NetworkCallback {
@@ -122,6 +131,11 @@ public class IwlanDataService extends DataService {
         @Override
         public void onLinkPropertiesChanged(Network network, LinkProperties linkProperties) {
             Log.d(TAG, "onLinkPropertiesChanged: " + linkProperties);
+            if (isLinkProtocolTypeChanged(linkProperties)) {
+                for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
+                    dp.dnsPrefetchCheck();
+                }
+            }
         }
 
         /** Called when access to the specified network is blocked or unblocked. */
@@ -910,6 +924,7 @@ public class IwlanDataService extends DataService {
         sDefaultDataTransport = transport;
 
         if (!networkConnected) {
+            sLinkProtocolType = LinkProtocolType.UNKNOWN;
             for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
                 // once network is disconnect, even NAT KA offload fails
                 // so we should force close all tunnels
@@ -923,6 +938,48 @@ public class IwlanDataService extends DataService {
                 dp.dnsPrefetchCheck();
             }
         }
+    }
+
+    static boolean isLinkProtocolTypeChanged(LinkProperties linkProperties) {
+        boolean hasIPV4 = false;
+        boolean hasIPV6 = false;
+
+        LinkProtocolType linkProtocolType = null;
+        if (linkProperties != null) {
+            for (LinkAddress linkAddress : linkProperties.getLinkAddresses()) {
+                InetAddress inetaddr = linkAddress.getAddress();
+                // skip linklocal and loopback addresses
+                if (!inetaddr.isLoopbackAddress() && !inetaddr.isLinkLocalAddress()) {
+                    if (inetaddr instanceof Inet4Address) {
+                        hasIPV4 = true;
+                    } else if (inetaddr instanceof Inet6Address) {
+                        hasIPV6 = true;
+                    }
+                }
+            }
+
+            if (hasIPV4 && hasIPV6) {
+                linkProtocolType = LinkProtocolType.IPV4V6;
+            } else if (hasIPV4) {
+                linkProtocolType = LinkProtocolType.IPV4;
+            } else if (hasIPV6) {
+                linkProtocolType = LinkProtocolType.IPV6;
+            }
+
+            if (sLinkProtocolType != linkProtocolType) {
+                Log.d(
+                        TAG,
+                        "LinkProtocolType was changed from "
+                                + sLinkProtocolType
+                                + " to "
+                                + linkProtocolType);
+                sLinkProtocolType = linkProtocolType;
+                return true;
+            }
+            return false;
+        }
+        Log.w(TAG, "linkProperties is NULL.");
+        return false;
     }
 
     /**
