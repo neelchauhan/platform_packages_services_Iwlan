@@ -245,13 +245,17 @@ public class EpdgSelectorTest {
         final CountDownLatch latch = new CountDownLatch(1);
         IwlanError ret =
                 mEpdgSelector.getValidatedServerList(
+                        1234,
                         EpdgSelector.PROTO_FILTER_IPV4V6,
                         false /*isRoaming*/,
                         isEmergency,
                         mMockNetwork,
                         new EpdgSelector.EpdgSelectorCallback() {
                             @Override
-                            public void onServerListChanged(ArrayList<InetAddress> validIPList) {
+                            public void onServerListChanged(
+                                    int transactionId, ArrayList<InetAddress> validIPList) {
+                                assertEquals(transactionId, 1234);
+
                                 for (InetAddress mInetAddress : validIPList) {
                                     testInetAddresses.add(mInetAddress);
                                 }
@@ -260,7 +264,7 @@ public class EpdgSelectorTest {
                             }
 
                             @Override
-                            public void onError(IwlanError epdgSelectorError) {
+                            public void onError(int transactionId, IwlanError epdgSelectorError) {
                                 Log.d(TAG, "onError received");
                                 latch.countDown();
                             }
