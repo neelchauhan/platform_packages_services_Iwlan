@@ -48,6 +48,7 @@ import org.mockito.MockitoSession;
 import org.mockito.quality.Strictness;
 
 import java.io.InputStream;
+import java.util.Map;
 
 public class ErrorPolicyManagerTest {
     private static final String TAG = "ErrorPolicyManagerTest";
@@ -652,6 +653,47 @@ public class ErrorPolicyManagerTest {
         // test whether the same error reported later starts from the beginning of retry array
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(10, time);
+    }
+
+    @Test
+    public void testErrorStats() throws Exception {
+        String apn1 = "ims";
+        String apn2 = "mms";
+
+        setupMockForCarrierConfig(null);
+
+        IwlanError iwlanError1 = buildIwlanIkeAuthFailedError();
+        long ikeAuthCountApn1 = 4L;
+        long ikeAuthCountApn2 = 5L;
+        for (int i = 0; i < ikeAuthCountApn1; i++) {
+            mErrorPolicyManager.reportIwlanError(apn1, iwlanError1);
+        }
+        for (int i = 0; i < ikeAuthCountApn2; i++) {
+            mErrorPolicyManager.reportIwlanError(apn2, iwlanError1);
+        }
+
+        long serverSelectionCountApn1 = 3L;
+        long serverSelectionCountApn2 = 6L;
+        IwlanError iwlanError2 = new IwlanError(IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED);
+        for (int i = 0; i < serverSelectionCountApn1; i++) {
+            mErrorPolicyManager.reportIwlanError(apn1, iwlanError2);
+        }
+        // calling backoff timer api
+        for (int i = 0; i < serverSelectionCountApn2; i++) {
+            mErrorPolicyManager.reportIwlanError(apn2, iwlanError2, 3);
+        }
+
+        Map<String, Long> apn1Stats = mErrorPolicyManager.getErrorStats().mStats.get(apn1);
+        Map<String, Long> apn2Stats = mErrorPolicyManager.getErrorStats().mStats.get(apn2);
+
+        long resultAuthApn1 = apn1Stats.get(iwlanError1.toString());
+        long resultAuthApn2 = apn2Stats.get(iwlanError1.toString());
+        long resultServerApn1 = apn1Stats.get(iwlanError2.toString());
+        long resultServerApn2 = apn2Stats.get(iwlanError2.toString());
+        assertEquals(resultAuthApn1, ikeAuthCountApn1);
+        assertEquals(resultAuthApn2, ikeAuthCountApn2);
+        assertEquals(resultServerApn1, serverSelectionCountApn1);
+        assertEquals(resultServerApn2, serverSelectionCountApn2);
     }
 
     private String getErrorTypeInJSON(
