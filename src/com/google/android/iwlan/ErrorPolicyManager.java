@@ -25,8 +25,8 @@ import android.os.Message;
 import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
 import android.telephony.DataFailCause;
-import android.telephony.data.DataService;
 import android.telephony.TelephonyManager;
+import android.telephony.data.DataService;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -44,6 +44,7 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -155,6 +156,8 @@ public class ErrorPolicyManager {
     // List of current Unthrottling events registered with IwlanEventListener
     private Set<Integer> mUnthrottlingEvents;
 
+    private ErrorStats mErrorStats = new ErrorStats();
+
     private HandlerThread mHandlerThread;
     @VisibleForTesting Handler mHandler;
 
@@ -205,6 +208,8 @@ public class ErrorPolicyManager {
             mLastErrorForApn.remove(apn);
             return retryTime;
         }
+        mErrorStats.update(apn, iwlanError);
+
         // remove the entry with the same error if it has back off time
         if (mLastErrorForApn.containsKey(apn)
                 && mLastErrorForApn.get(apn).getError().equals(iwlanError)
@@ -240,6 +245,7 @@ public class ErrorPolicyManager {
             mLastErrorForApn.remove(apn);
             return retryTime;
         }
+        mErrorStats.update(apn, iwlanError);
 
         // remove the entry with the same error if it doesn't have back off time.
         if (mLastErrorForApn.containsKey(apn)
@@ -410,6 +416,7 @@ public class ErrorPolicyManager {
             pw.print("APN: " + entry.getKey() + " IwlanError: " + entry.getValue().getError());
             pw.println(" currentRetryTime: " + entry.getValue().getCurrentRetryTime());
         }
+        pw.println(mErrorStats);
         pw.println("----------------------------");
     }
 
@@ -758,6 +765,11 @@ public class ErrorPolicyManager {
         }
     }
 
+    @VisibleForTesting
+    ErrorStats getErrorStats() {
+        return mErrorStats;
+    }
+
     class ErrorPolicy {
         @ErrorPolicyErrorType int mErrorType;
         List<String> mErrorDetails;
@@ -1011,6 +1023,58 @@ public class ErrorPolicyManager {
 
         EpmHandler(Looper looper) {
             super(looper);
+        }
+    }
+
+    @VisibleForTesting
+    class ErrorStats {
+        @VisibleForTesting Map<String, Map<String, Long>> mStats = new HashMap<>();
+        private Date mStartTime;
+        private int mStatCount = 0;
+        private final int APN_COUNT_MAX = 10;
+        private final int ERROR_COUNT_MAX = 1000;
+
+        ErrorStats() {
+            mStartTime = Calendar.getInstance().getTime();
+            mStatCount = 0;
+        }
+
+        void update(String apn, IwlanError error) {
+            if (mStats.size() >= APN_COUNT_MAX || mStatCount >= ERROR_COUNT_MAX) {
+                reset();
+            }
+            if (!mStats.containsKey(apn)) {
+                mStats.put(apn, new HashMap<String, Long>());
+            }
+            Map<String, Long> errorMap = mStats.get(apn);
+            String errorString = error.toString();
+            if (!errorMap.containsKey(errorString)) {
+                errorMap.put(errorString, 0L);
+            }
+            long count = errorMap.get(errorString);
+            errorMap.put(errorString, ++count);
+            mStats.put(apn, errorMap);
+            mStatCount++;
+        }
+
+        void reset() {
+            mStartTime = Calendar.getInstance().getTime();
+            mStats = new HashMap<String, Map<String, Long>>();
+            mStatCount = 0;
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("mStartTime: " + mStartTime);
+            sb.append("\nErrorStats");
+            for (Map.Entry<String, Map<String, Long>> entry : mStats.entrySet()) {
+                sb.append("\n\tApn: " + entry.getKey());
+                for (Map.Entry<String, Long> errorEntry : entry.getValue().entrySet()) {
+                    sb.append("\n\t  " + errorEntry.getKey() + " : " + errorEntry.getValue());
+                }
+            }
+            return sb.toString();
         }
     }
 }
