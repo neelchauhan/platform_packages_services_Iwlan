@@ -61,7 +61,11 @@ import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.LongSummaryStatistics;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -179,6 +183,7 @@ public class IwlanDataService extends DataService {
         private boolean mWfcEnabled = false;
         private boolean mCarrierConfigReady = false;
         private EpdgSelector mEpdgSelector;
+        private IwlanDataTunnelStats mTunnelStats;
 
         // apn to TunnelState
         // Lock this at public entry and exit points if:
@@ -204,6 +209,8 @@ public class IwlanDataService extends DataService {
             private int mState;
             private TunnelLinkProperties mTunnelLinkProperties;
             private boolean mIsHandover;
+            private Date mBringUpStateTime = null;
+            private Date mUpStateTime = null;
 
             public int getProtocolType() {
                 return mProtocolType;
@@ -247,6 +254,12 @@ public class IwlanDataService extends DataService {
             /** @param state (TunnelState.TUNNEL_DOWN|TUNNEL_UP|TUNNEL_DOWN) */
             public void setState(int state) {
                 mState = state;
+                if (mState == TunnelState.TUNNEL_IN_BRINGUP) {
+                    mBringUpStateTime = Calendar.getInstance().getTime();
+                }
+                if (mState == TunnelState.TUNNEL_UP) {
+                    mUpStateTime = Calendar.getInstance().getTime();
+                }
             }
 
             public void setIsHandover(boolean isHandover) {
@@ -255,6 +268,14 @@ public class IwlanDataService extends DataService {
 
             public boolean getIsHandover() {
                 return mIsHandover;
+            }
+
+            public Date getBringUpStateTime() {
+                return mBringUpStateTime;
+            }
+
+            public Date getUpStateTime() {
+                return mUpStateTime;
             }
 
             @Override
@@ -275,8 +296,20 @@ public class IwlanDataService extends DataService {
                         tunnelState = "IN BRINGDOWN";
                         break;
                 }
-                sb.append("Current State of this tunnel: " + mState + " " + tunnelState);
-                sb.append("\nTunnel state is in Handover: " + mIsHandover);
+                sb.append("\tCurrent State of this tunnel: " + mState + " " + tunnelState);
+                sb.append("\n\tTunnel state is in Handover: " + mIsHandover);
+                if (mBringUpStateTime != null) {
+                    sb.append("\n\tTunnel bring up initiated at: " + mBringUpStateTime);
+                } else {
+                    sb.append("\n\tPotential leak. Null mBringUpStateTime");
+                }
+                if (mUpStateTime != null) {
+                    sb.append("\n\tTunnel is up at: " + mUpStateTime);
+                }
+                if (mUpStateTime != null && mBringUpStateTime != null) {
+                    long tunnelUpTime = mUpStateTime.getTime() - mBringUpStateTime.getTime();
+                    sb.append("\n\tTime taken for the tunnel to come up in ms: " + tunnelUpTime);
+                }
                 return sb.toString();
             }
         }
@@ -302,6 +335,7 @@ public class IwlanDataService extends DataService {
                     // if its null, we should crash and debug.
                     tunnelState.setTunnelLinkProperties(linkProperties);
                     tunnelState.setState(TunnelState.TUNNEL_UP);
+                    mTunnelStats.reportTunnelSetupSuccess(apnName, tunnelState);
 
                     deliverCallback(
                             CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
@@ -317,6 +351,7 @@ public class IwlanDataService extends DataService {
                 // the expectation is error==NO_ERROR for user initiated/normal close.
                 synchronized (mTunnelStateForApn) {
                     TunnelState tunnelState = mTunnelStateForApn.get(apnName);
+                    mTunnelStats.reportTunnelDown(apnName, tunnelState);
                     mTunnelStateForApn.remove(apnName);
 
                     if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGUP) {
@@ -418,6 +453,147 @@ public class IwlanDataService extends DataService {
             }
         }
 
+        /** Holds all tunnel related time and count statistics for this IwlanDataServiceProvider */
+        @VisibleForTesting
+        class IwlanDataTunnelStats {
+
+            // represents the start time from when the following events are recorded
+            private Date mStartTime;
+
+            // Stats for TunnelSetup Success time (BRING_UP -> UP state)
+            @VisibleForTesting
+            Map<String, LongSummaryStatistics> mTunnelSetupSuccessStats =
+                    new HashMap<String, LongSummaryStatistics>();
+            // Count for Tunnel Setup failures onClosed when in BRING_UP
+            @VisibleForTesting
+            Map<String, Long> mTunnelSetupFailureCounts = new HashMap<String, Long>();
+
+            // Count for unsol tunnel down onClosed when in UP without deactivate
+            @VisibleForTesting
+            Map<String, Long> mUnsolTunnelDownCounts = new HashMap<String, Long>();
+
+            // Stats for how long the tunnel is in up state onClosed when in UP
+            @VisibleForTesting
+            Map<String, LongSummaryStatistics> mTunnelUpStats =
+                    new HashMap<String, LongSummaryStatistics>();
+
+            private long statCount;
+            private final long COUNT_MAX = 1000;
+            private final int APN_COUNT_MAX = 10;
+
+            public IwlanDataTunnelStats() {
+                mStartTime = Calendar.getInstance().getTime();
+                statCount = 0L;
+            }
+
+            public void reportTunnelSetupSuccess(String apn, TunnelState tunnelState) {
+                if (statCount > COUNT_MAX || maxApnReached()) {
+                    reset();
+                }
+                statCount++;
+
+                Date bringUpTime = tunnelState.getBringUpStateTime();
+                Date upTime = tunnelState.getUpStateTime();
+
+                if (bringUpTime != null && upTime != null) {
+                    long tunnelUpTime = upTime.getTime() - bringUpTime.getTime();
+                    if (!mTunnelSetupSuccessStats.containsKey(apn)) {
+                        mTunnelSetupSuccessStats.put(apn, new LongSummaryStatistics());
+                    }
+                    LongSummaryStatistics stats = mTunnelSetupSuccessStats.get(apn);
+                    stats.accept(tunnelUpTime);
+                    mTunnelSetupSuccessStats.put(apn, stats);
+                }
+            }
+
+            public void reportTunnelDown(String apn, TunnelState tunnelState) {
+                if (statCount > COUNT_MAX || maxApnReached()) {
+                    reset();
+                }
+                statCount++;
+
+                // Setup fail
+                if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGUP) {
+                    if (!mTunnelSetupFailureCounts.containsKey(apn)) {
+                        mTunnelSetupFailureCounts.put(apn, 0L);
+                    }
+                    long count = mTunnelSetupFailureCounts.get(apn);
+                    mTunnelSetupFailureCounts.put(apn, ++count);
+                    return;
+                }
+
+                // Unsolicited tunnel down as tunnel has to be in BRINGDOWN if
+                // there is a deactivate call associated with this.
+                if (tunnelState.getState() == TunnelState.TUNNEL_UP) {
+                    if (!mUnsolTunnelDownCounts.containsKey(apn)) {
+                        mUnsolTunnelDownCounts.put(apn, 0L);
+                    }
+                    long count = mUnsolTunnelDownCounts.get(apn);
+                    mUnsolTunnelDownCounts.put(apn, ++count);
+                }
+                Date currentTime = Calendar.getInstance().getTime();
+                Date upTime = tunnelState.getUpStateTime();
+                if (upTime != null) {
+                    if (!mTunnelUpStats.containsKey(apn)) {
+                        mTunnelUpStats.put(apn, new LongSummaryStatistics());
+                    }
+                    LongSummaryStatistics stats = mTunnelUpStats.get(apn);
+                    stats.accept(currentTime.getTime() - upTime.getTime());
+                    mTunnelUpStats.put(apn, stats);
+                }
+            }
+
+            boolean maxApnReached() {
+                if (mTunnelSetupSuccessStats.size() >= APN_COUNT_MAX
+                        || mTunnelSetupFailureCounts.size() >= APN_COUNT_MAX
+                        || mUnsolTunnelDownCounts.size() >= APN_COUNT_MAX
+                        || mTunnelUpStats.size() >= APN_COUNT_MAX) {
+                    return true;
+                }
+                return false;
+            }
+
+            @Override
+            public String toString() {
+                StringBuilder sb = new StringBuilder();
+                sb.append("IwlanDataTunnelStats:");
+                sb.append("\n\tmStartTime: " + mStartTime);
+                sb.append("\n\ttunnelSetupSuccessStats:");
+                for (Map.Entry<String, LongSummaryStatistics> entry :
+                        mTunnelSetupSuccessStats.entrySet()) {
+                    sb.append("\n\t  Apn: " + entry.getKey());
+                    sb.append("\n\t  " + entry.getValue());
+                }
+                sb.append("\n\ttunnelUpStats:");
+                for (Map.Entry<String, LongSummaryStatistics> entry : mTunnelUpStats.entrySet()) {
+                    sb.append("\n\t  Apn: " + entry.getKey());
+                    sb.append("\n\t  " + entry.getValue());
+                }
+
+                sb.append("\n\ttunnelSetupFailureCounts: ");
+                for (Map.Entry<String, Long> entry : mTunnelSetupFailureCounts.entrySet()) {
+                    sb.append("\n\t  Apn: " + entry.getKey());
+                    sb.append("\n\t  counts: " + entry.getValue());
+                }
+                sb.append("\n\tunsolTunnelDownCounts: ");
+                for (Map.Entry<String, Long> entry : mTunnelSetupFailureCounts.entrySet()) {
+                    sb.append("\n\t  Apn: " + entry.getKey());
+                    sb.append("\n\t  counts: " + entry.getValue());
+                }
+                sb.append("\n\tendTime: " + Calendar.getInstance().getTime());
+                return sb.toString();
+            }
+
+            private void reset() {
+                mStartTime = Calendar.getInstance().getTime();
+                mTunnelSetupSuccessStats = new HashMap<String, LongSummaryStatistics>();
+                mTunnelUpStats = new HashMap<String, LongSummaryStatistics>();
+                mTunnelSetupFailureCounts = new HashMap<String, Long>();
+                mUnsolTunnelDownCounts = new HashMap<String, Long>();
+                statCount = 0L;
+            }
+        }
+
         Looper getLooper() {
             mHandlerThread = new HandlerThread("DSPHandlerThread");
             mHandlerThread.start();
@@ -439,6 +615,7 @@ public class IwlanDataService extends DataService {
             mIwlanDataService = iwlanDataService;
             mIwlanTunnelCallback = new IwlanTunnelCallback(this);
             mEpdgSelector = EpdgSelector.getSelectorInstance(mContext, slotIndex);
+            mTunnelStats = new IwlanDataTunnelStats();
 
             // Register IwlanEventListener
             initHandler();
@@ -817,6 +994,11 @@ public class IwlanDataService extends DataService {
             return mIwlanTunnelCallback;
         }
 
+        @VisibleForTesting
+        IwlanDataTunnelStats getTunnelStats() {
+            return mTunnelStats;
+        }
+
         private void dnsPrefetchCheck() {
             boolean networkConnected =
                     mIwlanDataService.isNetworkConnected(
@@ -874,12 +1056,11 @@ public class IwlanDataService extends DataService {
                             + mWfcEnabled);
             synchronized (mTunnelStateForApn) {
                 for (Map.Entry<String, TunnelState> entry : mTunnelStateForApn.entrySet()) {
-                    pw.println("++++");
                     pw.println("Tunnel state for APN: " + entry.getKey());
                     pw.println(entry.getValue());
-                    pw.println("++++");
                 }
             }
+            pw.println(mTunnelStats);
             EpdgTunnelManager.getInstance(mContext, getSlotIndex()).dump(fd, pw, args);
             ErrorPolicyManager.getInstance(mContext, getSlotIndex()).dump(fd, pw, args);
             pw.println("-------------------------------------");
