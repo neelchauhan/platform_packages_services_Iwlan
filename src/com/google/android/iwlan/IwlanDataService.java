@@ -1096,9 +1096,10 @@ public class IwlanDataService extends DataService {
                                 + sDefaultDataTransport.name()
                                 + " to "
                                 + transport.name());
-                // Perform forceClose when doing handover between iWLAN and iDDS.
+                // Perform forceClose for tunnels in bringdown.
+                // let framework handle explicit teardown
                 for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
-                    dp.forceCloseTunnels();
+                    dp.forceCloseTunnelsInDeactivatingState();
                 }
             }
         }
@@ -1108,8 +1109,10 @@ public class IwlanDataService extends DataService {
             sLinkProtocolType = LinkProtocolType.UNKNOWN;
             for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
                 // once network is disconnect, even NAT KA offload fails
-                // so we should force close all tunnels
-                dp.forceCloseTunnels();
+                // But we should still let framework do an explicit teardown
+                // so as to not affect an ongoing handover
+                // only force close tunnels in bring down state
+                dp.forceCloseTunnelsInDeactivatingState();
             }
         } else {
             if (transport == Transport.WIFI) {
