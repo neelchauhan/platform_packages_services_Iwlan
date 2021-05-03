@@ -377,7 +377,7 @@ public class ErrorPolicyManager {
         if (!mLastErrorForApn.containsKey(apn)) {
             return -1;
         }
-        return TimeUnit.SECONDS.toMillis(mLastErrorForApn.get(apn).getCurrentRetryTime());
+        return mLastErrorForApn.get(apn).getCurrentRetryTime();
     }
 
     /**
@@ -937,13 +937,17 @@ public class ErrorPolicyManager {
          * of bounds.
          */
         long getCurrentRetryTime() {
+            long time = -1;
+
             if (mIsBackOffTimeValid) {
-                return mBackOffTime;
+                time = TimeUnit.SECONDS.toMillis(mBackOffTime);
+            } else if (mErrorPolicy == null) {
+                return time;
+            } else {
+                time = TimeUnit.SECONDS.toMillis(mErrorPolicy.getRetryTime(mCurrentRetryIndex));
             }
-            if (mErrorPolicy == null) {
-                return -1;
-            }
-            long time = mErrorPolicy.getRetryTime(mCurrentRetryIndex);
+            long currentTime = new Date().getTime();
+            time = Math.max(0, time - (currentTime - mLastErrorTime));
             Log.d(
                     LOG_TAG,
                     "Current RetryArray index: " + mCurrentRetryIndex + " and time: " + time);
@@ -959,13 +963,19 @@ public class ErrorPolicyManager {
         }
 
         boolean canBringUpTunnel() {
-            long currentTime = new Date().getTime();
-            long timeDifference = TimeUnit.MILLISECONDS.toSeconds(currentTime - mLastErrorTime);
-            long retryTime =
-                    mIsBackOffTimeValid
-                            ? mBackOffTime
-                            : mErrorPolicy.getRetryTime(mCurrentRetryIndex);
+            long retryTime;
             boolean ret = true;
+
+            if (mIsBackOffTimeValid) {
+                retryTime = TimeUnit.SECONDS.toMillis(mBackOffTime);
+            } else if (mErrorPolicy == null) {
+                return ret;
+            } else {
+                retryTime =
+                        TimeUnit.SECONDS.toMillis(mErrorPolicy.getRetryTime(mCurrentRetryIndex));
+            }
+            long currentTime = new Date().getTime();
+            long timeDifference = currentTime - mLastErrorTime;
             if (timeDifference < retryTime) {
                 ret = false;
             }
