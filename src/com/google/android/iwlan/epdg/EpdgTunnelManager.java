@@ -361,6 +361,54 @@ public class EpdgTunnelManager {
         public int getSrcIpv6AddressPrefixLen() {
             return mSrcIpv6AddressPrefixLen;
         }
+
+        private String addressListString(List<InetAddress> list) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("{ ");
+            for (InetAddress addr : list) {
+                sb.append(addr);
+                sb.append(", ");
+            }
+            sb.append(" }");
+            return sb.toString();
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("TunnelConfig { ");
+            /*if (mPcscfAddrList != null) {
+                sb.append("mPcscfAddrList: " + addressListString(mPcscfAddrList));
+                sb.append(", ");
+            }
+            if (mDnsAddrList != null) {
+                sb.append("mDnsAddrList: " + addressListString(mDnsAddrList));
+                sb.append(", ");
+            }
+            if (mInternalAddrList != null) {
+                sb.append("mInternalAddrList: { ");
+                for (LinkAddress addr : mInternalAddrList) {
+                    sb.append(addr + ", ");
+                }
+                sb.append(" }, ");
+            }
+
+            if (mSrcIpv6Address != null) {
+                sb.append("{mSrcIpv6Address: " + mSrcIpv6Address + "}, ");
+            } else {
+                sb.append("{NULL mSrcIpv6Address}, ");
+            } */
+
+            if (mSliceInfo != null) {
+                sb.append("mSliceInfo: " + mSliceInfo + ", ");
+            }
+
+            if (mIsBackoffTimeValid) {
+                sb.append("mBackoffTime: " + mBackoffTime + ", ");
+            }
+            sb.append(" }");
+            return sb.toString();
+        }
     }
 
     @VisibleForTesting
@@ -1159,8 +1207,8 @@ public class EpdgTunnelManager {
                     EpdgSelectorResult selectorResult = (EpdgSelectorResult) msg.obj;
                     printRequestQueue("EVENT_EPDG_ADDRESS_SELECTION_REQUEST_COMPLETE");
                     if ((tunnelRequestWrapper = mRequestQueue.peek()) == null) {
-                      Log.d(TAG, "Empty request queue");
-                      break;
+                        Log.d(TAG, "Empty request queue");
+                        break;
                     }
 
                     if (selectorResult.getEpdgError().getErrorType() == IwlanError.NO_ERROR
@@ -1710,6 +1758,16 @@ public class EpdgTunnelManager {
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         pw.println("---- EpdgTunnelManager ----");
         pw.println("mIsEpdgAddressSelected: " + mIsEpdgAddressSelected);
+        if (mEpdgAddress != null) {
+            pw.println("mEpdgAddress: " + mEpdgAddress);
+        }
+        pw.println("(Number of Epdgs tried) mCurrentNumberOfRetries: " + mCurrentNumberOfRetries);
+        pw.println("mApnNameToTunnelConfig:\n");
+        for (Map.Entry<String, TunnelConfig> entry : mApnNameToTunnelConfig.entrySet()) {
+            pw.println("APN: " + entry.getKey());
+            pw.println("TunnelConfig: " + entry.getValue());
+            pw.println();
+        }
         pw.println("---------------------------");
     }
 }
