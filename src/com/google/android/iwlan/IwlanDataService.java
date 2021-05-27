@@ -207,10 +207,19 @@ public class IwlanDataService extends DataService {
             static final int TUNNEL_IN_BRINGDOWN = 4;
             private DataServiceCallback dataServiceCallback;
             private int mState;
+            private int mPduSessionId;
             private TunnelLinkProperties mTunnelLinkProperties;
             private boolean mIsHandover;
             private Date mBringUpStateTime = null;
             private Date mUpStateTime = null;
+
+            public int getPduSessionId() {
+                return mPduSessionId;
+            }
+
+            public void setPduSessionId(int mPduSessionId) {
+                this.mPduSessionId = mPduSessionId;
+            }
 
             public int getProtocolType() {
                 return mProtocolType;
@@ -688,6 +697,7 @@ public class IwlanDataService extends DataService {
                     .setMtu(tunnelState.getLinkMtu())
                     .setMtuV4(tunnelState.getLinkMtu())
                     .setMtuV6(tunnelState.getLinkMtu())
+                    .setPduSessionId(tunnelState.getPduSessionId())
                     .build(); // underlying n/w is same
         }
 
@@ -873,7 +883,8 @@ public class IwlanDataService extends DataService {
                         callback,
                         TunnelState.TUNNEL_IN_BRINGUP,
                         null,
-                        (reason == DataService.REQUEST_REASON_HANDOVER));
+                        (reason == DataService.REQUEST_REASON_HANDOVER),
+                        pduSessionId);
 
                 boolean result =
                         getTunnelManager()
@@ -980,12 +991,14 @@ public class IwlanDataService extends DataService {
                 DataServiceCallback callback,
                 int tunnelStatus,
                 TunnelLinkProperties linkProperties,
-                boolean isHandover) {
+                boolean isHandover,
+                int pduSessionId) {
             TunnelState tunnelState = new TunnelState(callback);
             tunnelState.setState(tunnelStatus);
             tunnelState.setProtocolType(dataProfile.getProtocolType());
             tunnelState.setTunnelLinkProperties(linkProperties);
             tunnelState.setIsHandover(isHandover);
+            tunnelState.setPduSessionId(pduSessionId);
             mTunnelStateForApn.put(dataProfile.getApn(), tunnelState);
         }
 
