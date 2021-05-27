@@ -269,7 +269,8 @@ public class IwlanDataServiceTest {
                 new DataServiceCallback(callback),
                 TunnelState.TUNNEL_UP,
                 mLinkProperties,
-                false);
+                false,
+                1);
         mIwlanDataServiceProvider.requestDataCallList(new DataServiceCallback(callback));
         latch.await(1, TimeUnit.SECONDS);
 
@@ -463,7 +464,7 @@ public class IwlanDataServiceTest {
         doReturn(mMockEpdgTunnelManager).when(mSpyIwlanDataServiceProvider).getTunnelManager();
 
         mSpyIwlanDataServiceProvider.setTunnelState(
-                dp, mMockDataServiceCallback, TunnelState.TUNNEL_IN_BRINGUP, null, false);
+                dp, mMockDataServiceCallback, TunnelState.TUNNEL_IN_BRINGUP, null, false, 1);
 
         mSpyIwlanDataServiceProvider.deactivateDataCall(
                 TEST_APN_NAME.hashCode() /* cid: hashcode() of "ims" */,
@@ -497,7 +498,8 @@ public class IwlanDataServiceTest {
                 mMockDataServiceCallback,
                 TunnelState.TUNNEL_IN_BRINGUP,
                 null,
-                (setupDataReason == DataService.REQUEST_REASON_HANDOVER));
+                (setupDataReason == DataService.REQUEST_REASON_HANDOVER),
+                1);
 
         mSpyIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
@@ -534,7 +536,8 @@ public class IwlanDataServiceTest {
                 mMockDataServiceCallback,
                 TunnelState.TUNNEL_IN_BRINGUP,
                 null,
-                (setupDataReason == DataService.REQUEST_REASON_HANDOVER));
+                (setupDataReason == DataService.REQUEST_REASON_HANDOVER),
+                1);
 
         mSpyIwlanDataServiceProvider
                 .getIwlanTunnelCallback()
