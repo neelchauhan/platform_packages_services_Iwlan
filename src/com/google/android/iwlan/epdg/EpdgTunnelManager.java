@@ -140,6 +140,7 @@ public class EpdgTunnelManager {
     private ListIterator<InetAddress> mValidEpdgAddrListIter;
     private InetAddress mEpdgAddress;
     private Network mNetwork;
+    private int mTransactionId = 0;
     private boolean mIsEpdgAddressSelected;
     private IkeSessionCreator mIkeSessionCreator;
     private int mCurrentNumberOfRetries;
@@ -209,13 +210,15 @@ public class EpdgTunnelManager {
     private final EpdgSelector.EpdgSelectorCallback mSelectorCallback =
             new EpdgSelector.EpdgSelectorCallback() {
                 @Override
-                public void onServerListChanged(ArrayList<InetAddress> validIPList) {
-                    sendSelectionRequestComplete(validIPList, new IwlanError(IwlanError.NO_ERROR));
+                public void onServerListChanged(
+                        int transactionId, ArrayList<InetAddress> validIPList) {
+                    sendSelectionRequestComplete(
+                            validIPList, new IwlanError(IwlanError.NO_ERROR), transactionId);
                 }
 
                 @Override
-                public void onError(IwlanError epdgSelectorError) {
-                    sendSelectionRequestComplete(null, epdgSelectorError);
+                public void onError(int transactionId, IwlanError epdgSelectorError) {
+                    sendSelectionRequestComplete(null, epdgSelectorError, transactionId);
                 }
             };
 
@@ -1206,6 +1209,12 @@ public class EpdgTunnelManager {
                 case EVENT_EPDG_ADDRESS_SELECTION_REQUEST_COMPLETE:
                     EpdgSelectorResult selectorResult = (EpdgSelectorResult) msg.obj;
                     printRequestQueue("EVENT_EPDG_ADDRESS_SELECTION_REQUEST_COMPLETE");
+
+                    if (selectorResult.getTransactionId() != mTransactionId) {
+                        Log.e(TAG, "Mismatched transactionId");
+                        break;
+                    }
+
                     if ((tunnelRequestWrapper = mRequestQueue.peek()) == null) {
                         Log.d(TAG, "Empty request queue");
                         break;
@@ -1424,6 +1433,7 @@ public class EpdgTunnelManager {
         EpdgSelector epdgSelector = getEpdgSelector();
         IwlanError epdgError =
                 epdgSelector.getValidatedServerList(
+                        ++mTransactionId,
                         protoFilter,
                         setupRequest.isRoaming(),
                         setupRequest.isEmergency(),
@@ -1543,11 +1553,18 @@ public class EpdgTunnelManager {
             return mEpdgError;
         }
 
-        private final IwlanError mEpdgError;
+        public int getTransactionId() {
+            return mTransactionId;
+        }
 
-        private EpdgSelectorResult(List<InetAddress> validIpList, IwlanError epdgError) {
+        private final IwlanError mEpdgError;
+        private final int mTransactionId;
+
+        private EpdgSelectorResult(
+                List<InetAddress> validIpList, IwlanError epdgError, int transactionId) {
             mValidIpList = validIpList;
             mEpdgError = epdgError;
+            mTransactionId = transactionId;
         }
     }
 
@@ -1711,8 +1728,10 @@ public class EpdgTunnelManager {
     }
 
     @VisibleForTesting
-    void sendSelectionRequestComplete(ArrayList<InetAddress> validIPList, IwlanError result) {
-        EpdgSelectorResult epdgSelectorResult = new EpdgSelectorResult(validIPList, result);
+    void sendSelectionRequestComplete(
+            ArrayList<InetAddress> validIPList, IwlanError result, int transactionId) {
+        EpdgSelectorResult epdgSelectorResult =
+                new EpdgSelectorResult(validIPList, result, transactionId);
         mHandler.dispatchMessage(
                 mHandler.obtainMessage(
                         EVENT_EPDG_ADDRESS_SELECTION_REQUEST_COMPLETE, epdgSelectorResult));
