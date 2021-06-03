@@ -80,9 +80,9 @@ public class EpdgSelector {
 
     public interface EpdgSelectorCallback {
         /*gives priority ordered list of addresses*/
-        void onServerListChanged(ArrayList<InetAddress> validIPList);
+        void onServerListChanged(int transactionId, ArrayList<InetAddress> validIPList);
 
-        void onError(IwlanError error);
+        void onError(int transactionId, IwlanError error);
     }
 
     @VisibleForTesting
@@ -583,6 +583,7 @@ public class EpdgSelector {
     }
 
     public IwlanError getValidatedServerList(
+            int transactionId,
             @ProtoFilter int filter,
             boolean isRoaming,
             boolean isEmergency,
@@ -593,6 +594,7 @@ public class EpdgSelector {
 
         Runnable doValidation =
                 () -> {
+                    Log.d(TAG, "Processing request with transactionId: " + transactionId);
                     String[] plmnList;
 
                     int[] addrResolutionMethods =
@@ -631,9 +633,11 @@ public class EpdgSelector {
                     if (selectorCallback != null) {
                         if (!validIpList.isEmpty()) {
                             Collections.sort(validIpList, inetAddressComparator);
-                            selectorCallback.onServerListChanged(removeDuplicateIp(validIpList));
+                            selectorCallback.onServerListChanged(
+                                    transactionId, removeDuplicateIp(validIpList));
                         } else {
                             selectorCallback.onError(
+                                    transactionId,
                                     new IwlanError(
                                             IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED));
                         }
