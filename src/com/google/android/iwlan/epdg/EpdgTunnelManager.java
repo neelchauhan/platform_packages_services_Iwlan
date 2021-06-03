@@ -867,7 +867,7 @@ public class EpdgTunnelManager {
                         // See https://www.iana.org/assignments/dscp-registry/dscp-registry.xhtml
                         // This will make WiFi prioritize IKE signallig under WMM AC_VO
                         .setDscp(46)
-                        .setServerHostname(mEpdgAddress.getHostName())
+                        .setServerHostname(mEpdgAddress.getHostAddress())
                         .setLocalIdentification(getLocalIdentification())
                         .setRemoteIdentification(getId(setupRequest.apnName(), false))
                         .setAuthEap(null, getEapConfig())
