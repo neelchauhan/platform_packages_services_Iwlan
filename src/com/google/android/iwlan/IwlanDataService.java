@@ -841,7 +841,7 @@ public class IwlanDataService extends DataService {
                         || mTunnelStateForApn.get(dataProfile.getApn()) != null) {
                     deliverCallback(
                             CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
-                            DataServiceCallback.RESULT_ERROR_ILLEGAL_STATE,
+                            5 /* DataServiceCallback.RESULT_ERROR_TEMPORARILY_UNAVAILABLE */,
                             callback,
                             null);
                     return;
@@ -1012,6 +1012,28 @@ public class IwlanDataService extends DataService {
             return mTunnelStats;
         }
 
+        private void updateNetwork(Network network) {
+            if (network != null) {
+                synchronized (mTunnelStateForApn) {
+                    for (Map.Entry<String, TunnelState> entry : mTunnelStateForApn.entrySet()) {
+                        TunnelState tunnelState = entry.getValue();
+                        if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGUP) {
+                            // force close tunnels in bringup since IKE lib only supports
+                            // updating network for tunnels that are already up
+                            getTunnelManager().closeTunnel(entry.getKey(), true);
+                        } else {
+                            if (mIwlanDataService.isNetworkConnected(
+                                    IwlanHelper.isDefaultDataSlot(mContext, getSlotIndex()),
+                                    IwlanHelper.isCrossSimCallingEnabled(
+                                            mContext, getSlotIndex()))) {
+                                getTunnelManager().updateNetwork(network, entry.getKey());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         private void dnsPrefetchCheck() {
             boolean networkConnected =
                     mIwlanDataService.isNetworkConnected(
@@ -1095,8 +1117,13 @@ public class IwlanDataService extends DataService {
     /* Note: this api should have valid transport if networkConnected==true */
     static void setNetworkConnected(
             boolean networkConnected, Network network, Transport transport) {
+        boolean hasNetworkChanged = false;
         sNetworkConnected = networkConnected;
-        sNetwork = network;
+        if (!network.equals(sNetwork)) {
+            Log.e(TAG, "setNetworkConnected NW changed from: " + sNetwork + " TO: " + network);
+            sNetwork = network;
+            hasNetworkChanged = true;
+        }
         if (networkConnected) {
             if (transport == Transport.UNSPECIFIED_NETWORK) {
                 Log.e(TAG, "setNetworkConnected: Network connected but transport unspecified");
@@ -1133,6 +1160,12 @@ public class IwlanDataService extends DataService {
             }
             for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
                 dp.dnsPrefetchCheck();
+            }
+
+            if (hasNetworkChanged) {
+                for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
+                    dp.updateNetwork(sNetwork);
+                }
             }
         }
     }
