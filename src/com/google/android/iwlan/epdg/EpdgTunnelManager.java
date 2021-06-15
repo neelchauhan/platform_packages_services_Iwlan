@@ -41,6 +41,7 @@ import android.net.ipsec.ike.IkeSaProposal;
 import android.net.ipsec.ike.IkeSession;
 import android.net.ipsec.ike.IkeSessionCallback;
 import android.net.ipsec.ike.IkeSessionConfiguration;
+import android.net.ipsec.ike.IkeSessionConnectionInfo;
 import android.net.ipsec.ike.IkeSessionParams;
 import android.net.ipsec.ike.IkeTrafficSelector;
 import android.net.ipsec.ike.SaProposal;
@@ -106,6 +107,7 @@ public class EpdgTunnelManager {
     private static final int EVENT_EPDG_ADDRESS_SELECTION_REQUEST_COMPLETE = 6;
     private static final int EVENT_IPSEC_TRANSFORM_CREATED = 7;
     private static final int EVENT_IPSEC_TRANSFORM_DELETED = 8;
+    private static final int EVENT_UPDATE_NETWORK = 9;
     private static final int IKE_HARD_LIFETIME_SEC_MINIMUM = 300;
     private static final int IKE_HARD_LIFETIME_SEC_MAXIMUM = 86400;
     private static final int IKE_SOFT_LIFETIME_SEC_MINIMUM = 120;
@@ -452,6 +454,19 @@ public class EpdgTunnelManager {
                             + " ErrorData:"
                             + exception.getMessage());
         }
+
+        @Override
+        public void onIkeSessionConnectionInfoChanged(
+                IkeSessionConnectionInfo ikeSessionConnectionInfo) {
+            Log.d(TAG, "Ike session connection info changed for apn: " + mApnName);
+            TunnelConfig tunnelConfig = mApnNameToTunnelConfig.get(mApnName);
+            IpSecManager.IpSecTunnelInterface tunnelInterface = tunnelConfig.getIface();
+            try {
+                tunnelInterface.setUnderlyingNetwork(ikeSessionConnectionInfo.getNetwork());
+            } catch (IOException e) {
+                Log.e(TAG, "IOException while updating underlying network for apn: " + mApnName);
+            }
+        }
     }
 
     @VisibleForTesting
@@ -551,6 +566,23 @@ public class EpdgTunnelManager {
         }
 
         @Override
+        public void onIpSecTransformsMigrated(
+                IpSecTransform inIpSecTransform, IpSecTransform outIpSecTransform) {
+            // migration is similar to addition
+            Log.d(TAG, "Transforms migrated for apn: + " + mApnName);
+            mHandler.dispatchMessage(
+                    mHandler.obtainMessage(
+                            EVENT_IPSEC_TRANSFORM_CREATED,
+                            new IpsecTransformData(
+                                    inIpSecTransform, IpSecManager.DIRECTION_IN, mApnName)));
+            mHandler.dispatchMessage(
+                    mHandler.obtainMessage(
+                            EVENT_IPSEC_TRANSFORM_CREATED,
+                            new IpsecTransformData(
+                                    outIpSecTransform, IpSecManager.DIRECTION_OUT, mApnName)));
+        }
+
+        @Override
         public void onIpSecTransformCreated(IpSecTransform ipSecTransform, int direction) {
             Log.d(TAG, "Transform created, direction: " + direction + ", apn:" + mApnName);
             mHandler.dispatchMessage(
@@ -635,6 +667,20 @@ public class EpdgTunnelManager {
         return true;
     }
 
+    /**
+     * Update the local Network. This will trigger a revaluation for every tunnel for which tunnel
+     * manager has state.
+     *
+     * <p>Tunnels in bringup state will be for closed since IKE currently keeps retrying.
+     *
+     * <p>For rest of the tunnels, update IKE session wth new network. This will either result in
+     * MOBIKE callflow or just a rekey over new Network
+     */
+    public void updateNetwork(@NonNull Network network, String apnName) {
+        UpdateNetworkWrapper updateNetworkWrapper = new UpdateNetworkWrapper(network, apnName);
+        mHandler.dispatchMessage(
+                mHandler.obtainMessage(EVENT_UPDATE_NETWORK, updateNetworkWrapper));
+    }
     /**
      * Bring up epdg tunnel. Only one bring up request per apn is expected. All active tunnel
      * requests and tunnels are expected to be on the same network.
@@ -874,6 +920,7 @@ public class EpdgTunnelManager {
                         .addSaProposal(buildIkeSaProposal())
                         .setNetwork(mNetwork)
                         .addIkeOption(IkeSessionParams.IKE_OPTION_ACCEPT_ANY_REMOTE_ID)
+                        .addIkeOption(IkeSessionParams.IKE_OPTION_MOBIKE)
                         .setLifetimeSeconds(hardTimeSeconds, softTimeSeconds)
                         .setRetransmissionTimeoutsMillis(getRetransmissionTimeoutsFromConfig())
                         .setDpdDelaySeconds(getDpdDelayFromConfig());
@@ -1330,6 +1377,18 @@ public class EpdgTunnelManager {
                     }
                     break;
 
+                case EVENT_UPDATE_NETWORK:
+                    UpdateNetworkWrapper updatedNetwork = (UpdateNetworkWrapper) msg.obj;
+                    apnName = updatedNetwork.getApnName();
+                    Network network = updatedNetwork.getNetwork();
+                    tunnelConfig = mApnNameToTunnelConfig.get(apnName);
+                    if (tunnelConfig == null) {
+                        Log.d(TAG, "Update Network request: No tunnel exists for apn: " + apnName);
+                    } else {
+                        Log.d(TAG, "Updating Network for apn: " + apnName + " Network: " + network);
+                        tunnelConfig.getIkeSession().setNetwork(network);
+                    }
+                    break;
                 case EVENT_TUNNEL_BRINGDOWN_REQUEST:
                     apnName = (String) msg.obj;
                     int forceClose = msg.arg1;
@@ -1521,6 +1580,24 @@ public class EpdgTunnelManager {
         Log.d(TAG, "mRequestQueue: " + Arrays.toString(mRequestQueue.toArray()));
     }
 
+    // Update Network wrapper
+    private static final class UpdateNetworkWrapper {
+        private final Network mNetwork;
+        private final String mApnName;
+
+        private UpdateNetworkWrapper(Network network, String apnName) {
+            mNetwork = network;
+            mApnName = apnName;
+        }
+
+        public String getApnName() {
+            return mApnName;
+        }
+
+        public Network getNetwork() {
+            return mNetwork;
+        }
+    }
     // Tunnel request + tunnel callback
     private static final class TunnelRequestWrapper {
         private final TunnelSetupRequest mSetupRequest;
