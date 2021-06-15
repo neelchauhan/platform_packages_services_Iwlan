@@ -365,7 +365,7 @@ public class IwlanDataServiceTest {
 
         verify(mMockDataServiceCallback, timeout(1000).times(1))
                 .onSetupDataCallComplete(
-                        eq(DataServiceCallback.RESULT_ERROR_ILLEGAL_STATE), isNull());
+                        eq(5 /*DataServiceCallback.RESULT_ERROR_TEMPORARILY_UNAVAILABLE */), isNull());
     }
 
     @Test
@@ -673,7 +673,7 @@ public class IwlanDataServiceTest {
 
         verify(mMockDataServiceCallback, timeout(1000).times(1))
                 .onSetupDataCallComplete(
-                        eq(DataServiceCallback.RESULT_ERROR_ILLEGAL_STATE), isNull());
+                        eq(5 /* DataServiceCallback.RESULT_ERROR_TEMPORARILY_UNAVAILABLE */), isNull());
     }
 
     @Test
