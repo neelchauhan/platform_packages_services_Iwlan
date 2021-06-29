@@ -83,7 +83,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
@@ -138,14 +137,12 @@ public class EpdgTunnelManager {
 
     private Queue<TunnelRequestWrapper> mRequestQueue = new LinkedList<>();
 
-    private List<InetAddress> mValidEpdgAddrList;
-    private ListIterator<InetAddress> mValidEpdgAddrListIter;
+    private EpdgInfo mValidEpdgInfo = new EpdgInfo();
     private InetAddress mEpdgAddress;
     private Network mNetwork;
     private int mTransactionId = 0;
     private boolean mIsEpdgAddressSelected;
     private IkeSessionCreator mIkeSessionCreator;
-    private int mCurrentNumberOfRetries;
 
     private Map<String, TunnelConfig> mApnNameToTunnelConfig = new ConcurrentHashMap<>();
 
@@ -603,7 +600,6 @@ public class EpdgTunnelManager {
         mContext = context;
         mSlotId = slotId;
         mIkeSessionCreator = new IkeSessionCreator();
-        mCurrentNumberOfRetries = 0;
         TAG = EpdgTunnelManager.class.getSimpleName() + "[" + mSlotId + "]";
         initHandler();
     }
@@ -1201,21 +1197,6 @@ public class EpdgTunnelManager {
         mHandler.dispatchMessage(mHandler.obtainMessage(sessionType, apnName));
     }
 
-    private boolean shouldTryNextServerForError(IwlanError error) {
-        // Retry only for server timeout errors.
-        if (error.getErrorType() == IwlanError.IKE_INTERNAL_IO_EXCEPTION) {
-            if (error.getException().getCause() != null) {
-                String message = error.getException().getCause().getMessage();
-                if (message != null
-                        && (message.equals("Retransmitting IKE INIT request failure")
-                                || message.equals("Retransmitting failure"))) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
     private final class TmHandler extends Handler {
         private final String TAG = TmHandler.class.getSimpleName();
 
@@ -1268,13 +1249,8 @@ public class EpdgTunnelManager {
                     }
 
                     if (selectorResult.getEpdgError().getErrorType() == IwlanError.NO_ERROR
-                            && (mValidEpdgAddrList = selectorResult.getValidIpList()) != null
-                            && (mEpdgAddress = getNextValidEpdgAddress()) != null) {
-                        Log.d(
-                                TAG,
-                                "mValidEpdgAddrList: "
-                                        + Arrays.toString(mValidEpdgAddrList.toArray()));
-                        mCurrentNumberOfRetries++;
+                            && selectorResult.getValidIpList() != null) {
+                        validateAndSetEpdgAddress(selectorResult.getValidIpList());
                         onBringUpTunnel(
                                 tunnelRequestWrapper.getSetupRequest(),
                                 tunnelRequestWrapper.getTunnelCallback());
@@ -1297,7 +1273,7 @@ public class EpdgTunnelManager {
                             .getTunnelCallback()
                             .onOpened(apnName, tunnelOpenedData.getLinkProperties());
                     setIsEpdgAddressSelected(true);
-                    mCurrentNumberOfRetries = 0;
+                    mValidEpdgInfo.resetIndex();
                     mRequestQueue.poll();
                     printRequestQueue("EVENT_CHILD_SESSION_OPENED");
                     serviceAllPendingRequests();
@@ -1315,52 +1291,14 @@ public class EpdgTunnelManager {
                     }
 
                     if (!mIsEpdgAddressSelected) {
-                        // Retry only if it is an IKE_INTERNAL_IO_EXCEPTION
-                        // TODO: double check if this is sent for internal timeout
-                        // and retry only for server timeouts. b/176539488
-                        if (shouldTryNextServerForError(iwlanError)) {
-                            int maxRetries = IwlanHelper.getMaxRetries(mContext, mSlotId);
-                            // If all epdg addresses are exhausted or if the number of retries
-                            // exceeded
-                            // maximum retries:
-                            // reset the iterator, reset mCurrentNumberOfRetries and go to
-                            // the next request.
-                            if ((mEpdgAddress = getNextValidEpdgAddress()) == null
-                                    || mCurrentNumberOfRetries > maxRetries) {
-                                Log.d(TAG, "Reset mValidEpdgAddrListIter");
-                                mRequestQueue.poll();
-                                mValidEpdgAddrListIter = mValidEpdgAddrList.listIterator();
-                                mEpdgAddress = getNextValidEpdgAddress();
-                                if (tunnelConfig.isBackoffTimeValid()) {
-                                    reportIwlanError(
-                                            apnName, iwlanError, tunnelConfig.getBackoffTime());
-                                } else {
-                                    reportIwlanError(apnName, iwlanError);
-                                }
-                                tunnelConfig
-                                        .getTunnelCallback()
-                                        .onClosed(apnName, tunnelConfig.getError());
-                                mCurrentNumberOfRetries = 0;
-                            }
-                            // Use the next request if present in queue to bring up tunnel
-                            if ((tunnelRequestWrapper = mRequestQueue.peek()) != null) {
-                                Log.d(TAG, "Use next request in the queue to bring up tunnel");
-                                mCurrentNumberOfRetries++;
-                                onBringUpTunnel(
-                                        tunnelRequestWrapper.getSetupRequest(),
-                                        tunnelRequestWrapper.getTunnelCallback());
-                            }
-                        } else {
-                            // fail all the requests. report back off timer, if present, to the
-                            // current request.
-                            if (tunnelConfig.isBackoffTimeValid()) {
-                                mRequestQueue.poll();
-                                reportIwlanError(
-                                        apnName, iwlanError, tunnelConfig.getBackoffTime());
-                                tunnelConfig.getTunnelCallback().onClosed(apnName, iwlanError);
-                            }
-                            failAllPendingRequests(iwlanError);
+                        // fail all the requests. report back off timer, if present, to the
+                        // current request.
+                        if (tunnelConfig.isBackoffTimeValid()) {
+                            mRequestQueue.poll();
+                            reportIwlanError(apnName, iwlanError, tunnelConfig.getBackoffTime());
+                            tunnelConfig.getTunnelCallback().onClosed(apnName, iwlanError);
                         }
+                        failAllPendingRequests(iwlanError);
                     } else {
                         mRequestQueue.poll();
                         Log.d(TAG, "Tunnel Closed: " + iwlanError);
@@ -1532,14 +1470,24 @@ public class EpdgTunnelManager {
         }
     }
 
-    private InetAddress getNextValidEpdgAddress() {
-        if (mValidEpdgAddrListIter == null && mValidEpdgAddrList != null) {
-            mValidEpdgAddrListIter = mValidEpdgAddrList.listIterator();
+    @VisibleForTesting
+    void validateAndSetEpdgAddress(List<InetAddress> selectorResultList) {
+        List<InetAddress> addrList = mValidEpdgInfo.getAddrList();
+        if (addrList == null || !addrList.equals(selectorResultList)) {
+            Log.d(TAG, "Update ePDG address list.");
+            mValidEpdgInfo.setAddrList(selectorResultList);
+            addrList = mValidEpdgInfo.getAddrList();
         }
-        if (mValidEpdgAddrListIter != null && mValidEpdgAddrListIter.hasNext()) {
-            return mValidEpdgAddrListIter.next();
-        }
-        return null;
+
+        int index = mValidEpdgInfo.getIndex();
+        Log.d(
+                TAG,
+                "Valid ePDG Address List: "
+                        + Arrays.toString(addrList.toArray())
+                        + ", index = "
+                        + index);
+        mEpdgAddress = addrList.get(index);
+        mValidEpdgInfo.incrementIndex();
     }
 
     @VisibleForTesting
@@ -1547,13 +1495,10 @@ public class EpdgTunnelManager {
         Log.d(TAG, "resetTunnelManagerState");
         mEpdgAddress = null;
         setIsEpdgAddressSelected(false);
-        mValidEpdgAddrList = null;
-        mValidEpdgAddrListIter = null;
         mNetwork = null;
         mRequestQueue = new LinkedList<>();
         mApnNameToTunnelConfig = new ConcurrentHashMap<>();
         mLocalAddresses = null;
-        mCurrentNumberOfRetries = 0;
     }
 
     private void serviceAllPendingRequests() {
@@ -1689,6 +1634,41 @@ public class EpdgTunnelManager {
 
         public String getApnName() {
             return mApnName;
+        }
+    }
+
+    private static final class EpdgInfo {
+        private List<InetAddress> mAddrList;
+        private int mIndex;
+
+        private EpdgInfo() {
+            mAddrList = null;
+            mIndex = 0;
+        }
+
+        public List<InetAddress> getAddrList() {
+            return mAddrList;
+        }
+
+        public void setAddrList(@NonNull List<InetAddress> AddrList) {
+            mAddrList = AddrList;
+            resetIndex();
+        }
+
+        public int getIndex() {
+            return mIndex;
+        }
+
+        public void incrementIndex() {
+            if (getIndex() >= getAddrList().size() - 1) {
+                resetIndex();
+            } else {
+                mIndex++;
+            }
+        }
+
+        public void resetIndex() {
+            mIndex = 0;
         }
     }
 
@@ -1857,7 +1837,6 @@ public class EpdgTunnelManager {
         if (mEpdgAddress != null) {
             pw.println("mEpdgAddress: " + mEpdgAddress);
         }
-        pw.println("(Number of Epdgs tried) mCurrentNumberOfRetries: " + mCurrentNumberOfRetries);
         pw.println("mApnNameToTunnelConfig:\n");
         for (Map.Entry<String, TunnelConfig> entry : mApnNameToTunnelConfig.entrySet()) {
             pw.println("APN: " + entry.getKey());

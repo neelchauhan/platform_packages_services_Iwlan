@@ -37,12 +37,6 @@ import java.util.List;
 
 public class IwlanHelper {
 
-    /** Maximum number of immediate tunnel setup retries permitted. */
-    public static final String CONFIG_KEY_MAX_IMMEDIATE_TUNNEL_SETUP_RETRIES =
-            "iwlan.max_immediate_tunnel_setup_retries";
-
-    private static final int DEFAULT_MAX_IMMEDIATE_TUNNEL_SETUP_RETRIES = 4;
-
     private static final String TAG = IwlanHelper.class.getSimpleName();
 
     public static String getNai(Context context, int slotId) {
@@ -157,25 +151,6 @@ public class IwlanHelper {
         }
 
         throw new IllegalStateException("Local address should not be null.");
-    }
-
-    public static int getMaxRetries(Context context, int slotId) {
-        CarrierConfigManager carrierConfigManager =
-                context.getSystemService(CarrierConfigManager.class);
-        if (carrierConfigManager == null) {
-            throw new IllegalStateException("Carrier config manager is null.");
-        }
-
-        PersistableBundle bundle =
-                carrierConfigManager.getConfigForSubId(getSubId(context, slotId));
-        int maxRetries = DEFAULT_MAX_IMMEDIATE_TUNNEL_SETUP_RETRIES;
-        if (bundle != null) {
-            maxRetries =
-                    bundle.getInt(
-                            CONFIG_KEY_MAX_IMMEDIATE_TUNNEL_SETUP_RETRIES,
-                            DEFAULT_MAX_IMMEDIATE_TUNNEL_SETUP_RETRIES);
-        }
-        return maxRetries;
     }
 
     public static <T> T getConfig(String key, Context context, int slotId) {
