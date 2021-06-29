@@ -66,6 +66,12 @@
         "ErrorDetails": ["*"],
         "RetryArray": ["5", "10", "-1"],
         "UnthrottlingEvents": ["APM_ENABLE_EVENT", "APM_DISABLE_EVENT", "WIFI_DISABLE_EVENT", "WIFI_AP_CHANGED_EVENT"]
+      },
+      {
+        "ErrorType": "GENERIC_ERROR_TYPE",
+        "ErrorDetails": ["IO_EXCEPTION"],
+        "RetryArray": ["0", "0", "0", "60+r15", "120", "-1"],
+        "UnthrottlingEvents": ["APM_ENABLE_EVENT", "APM_DISABLE_EVENT", "WIFI_DISABLE_EVENT", "WIFI_AP_CHANGED_EVENT"]
       }
     ]
   }

@@ -54,7 +54,6 @@ import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
 
 import com.google.android.iwlan.IwlanError;
-import com.google.android.iwlan.IwlanHelper;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -467,8 +466,13 @@ public class EpdgTunnelManagerTest {
     }
 
     @Test
-    public void testRetryAfterTunnelSetupFails() throws Exception {
+    public void testGetValidEpdgAddress_DiffAddr() throws Exception {
         String testApnName = "www.xyz.com";
+
+        List<InetAddress> ipList1 = new ArrayList<>();
+        ipList1.add(InetAddress.getByName("1.1.1.1"));
+        mEpdgTunnelManager.validateAndSetEpdgAddress(ipList1);
+
         IwlanError error = new IwlanError(new IkeInternalException(new IOException()));
 
         doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(testApnName), eq(error));
@@ -500,39 +504,32 @@ public class EpdgTunnelManagerTest {
                         mMockIwlanTunnelCallback);
         assertTrue(ret);
 
-        ArrayList<InetAddress> ipList = new ArrayList<>();
-        ipList.add(InetAddress.getByName("1.1.1.1"));
-        ipList.add(InetAddress.getByName("8.8.8.8"));
-        ipList.add(InetAddress.getByName("3.3.3.3"));
+        ArrayList<InetAddress> ipList2 = new ArrayList<>();
+        ipList2.add(InetAddress.getByName("8.8.8.8"));
         mEpdgTunnelManager.sendSelectionRequestComplete(
-                ipList, new IwlanError(IwlanError.NO_ERROR), 1);
-        EpdgTunnelManager.TmIkeSessionCallback ikeSessionCallback;
-        for (InetAddress ip : ipList) {
-            ikeSessionCallback = verifyCreateIkeSession(ip);
-            // Call onclosed with IOException - which should trigger bringup tunnel for the next
-            // address
-            ikeSessionCallback.onClosedExceptionally(
-                    new IkeInternalException(new IOException("Retransmitting failure")));
-            Thread.sleep(500);
-        }
+                ipList2, new IwlanError(IwlanError.NO_ERROR), 1);
+        EpdgTunnelManager.TmIkeSessionCallback ikeSessionCallback =
+                verifyCreateIkeSession(ipList2.get(0));
+        ikeSessionCallback.onClosedExceptionally(
+                new IkeInternalException(new IOException("Retransmitting failure")));
 
-        // verify that tunnel callback and reportIwlanError are called after the ip List is
-        // exhausted
         verify(mEpdgTunnelManager, times(1)).reportIwlanError(eq(testApnName), eq(error));
         verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(testApnName), eq(error));
     }
 
     @Test
-    public void testRetryExhaustionAfterTunnelSetupFails() throws Exception {
+    public void testGetValidEpdgAddress_NextAddr() throws Exception {
         String testApnName = "www.xyz.com";
-        final int MAX_RETRIES = 2;
+
+        List<InetAddress> ipList1 = new ArrayList<>();
+        ipList1.add(InetAddress.getByName("1.1.1.1"));
+        ipList1.add(InetAddress.getByName("8.8.8.8"));
+        mEpdgTunnelManager.validateAndSetEpdgAddress(ipList1);
+
         IwlanError error = new IwlanError(new IkeInternalException(new IOException()));
 
         doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(testApnName), eq(error));
-
-        PersistableBundle bundle = new PersistableBundle();
-        bundle.putInt(IwlanHelper.CONFIG_KEY_MAX_IMMEDIATE_TUNNEL_SETUP_RETRIES, MAX_RETRIES);
-        setupMockForGetConfig(bundle);
+        setupMockForGetConfig(null);
         when(mMockEpdgSelector.getValidatedServerList(
                         anyInt(),
                         anyInt(),
@@ -560,25 +557,16 @@ public class EpdgTunnelManagerTest {
                         mMockIwlanTunnelCallback);
         assertTrue(ret);
 
-        ArrayList<InetAddress> ipList = new ArrayList<>();
-        ipList.add(InetAddress.getByName("1.1.1.1"));
-        ipList.add(InetAddress.getByName("8.8.8.8"));
-        ipList.add(InetAddress.getByName("3.3.3.3"));
-        ipList.add(InetAddress.getByName("4.4.4.4"));
-        ipList.add(InetAddress.getByName("5.5.5.5"));
+        ArrayList<InetAddress> ipList2 = new ArrayList<>();
+        ipList2.add(InetAddress.getByName("1.1.1.1"));
+        ipList2.add(InetAddress.getByName("8.8.8.8"));
         mEpdgTunnelManager.sendSelectionRequestComplete(
-                ipList, new IwlanError(IwlanError.NO_ERROR), 1);
-        EpdgTunnelManager.TmIkeSessionCallback ikeSessionCallback;
+                ipList2, new IwlanError(IwlanError.NO_ERROR), 1);
+        EpdgTunnelManager.TmIkeSessionCallback ikeSessionCallback =
+                verifyCreateIkeSession(ipList2.get(1));
+        ikeSessionCallback.onClosedExceptionally(
+                new IkeInternalException(new IOException("Retransmitting failure")));
 
-        for (int i = 0; i <= MAX_RETRIES; i++) {
-            ikeSessionCallback = verifyCreateIkeSession(ipList.get(i));
-            // last report of this onClosedExceptionally should trigger tunnel closed callback
-            ikeSessionCallback.onClosedExceptionally(
-                    new IkeInternalException(
-                            new IOException("Retransmitting IKE INIT request failure")));
-            Thread.sleep(500);
-        }
-        // Verify onclosed being called without exhausting the ipList.
         verify(mEpdgTunnelManager, times(1)).reportIwlanError(eq(testApnName), eq(error));
         verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(testApnName), eq(error));
     }
@@ -598,7 +586,7 @@ public class EpdgTunnelManagerTest {
                         ikeSessionCallbackCaptor.capture(),
                         any(ChildSessionCallback.class));
         IkeSessionParams ikeSessionParams = ikeSessionParamsCaptor.getValue();
-        assertEquals(ikeSessionParams.getServerHostname(), ip.getHostName());
+        assertEquals(ikeSessionParams.getServerHostname(), ip.getHostAddress());
         return ikeSessionCallbackCaptor.getValue();
     }
 
@@ -705,7 +693,7 @@ public class EpdgTunnelManagerTest {
                         ikeSessionCallbackCaptor.capture(),
                         any(ChildSessionCallback.class));
         IkeSessionParams ikeSessionParams = ikeSessionParamsCaptor.getValue();
-        assertEquals(ikeSessionParams.getServerHostname(), ipList.get(0).getHostName());
+        assertEquals(ikeSessionParams.getServerHostname(), ipList.get(0).getHostAddress());
 
         Ike3gppExtension.Ike3gppDataListener ike3gppCallback =
                 ikeSessionParams.getIke3gppExtension().getIke3gppDataListener();
