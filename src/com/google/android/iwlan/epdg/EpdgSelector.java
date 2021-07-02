@@ -17,9 +17,11 @@
 package com.google.android.iwlan.epdg;
 
 import android.content.Context;
+import android.net.DnsResolver;
 import android.net.Network;
 import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.telephony.CarrierConfigManager;
 import android.telephony.CellIdentityGsm;
 import android.telephony.CellIdentityLte;
@@ -44,6 +46,7 @@ import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class EpdgSelector {
@@ -141,36 +144,49 @@ public class EpdgSelector {
         // Get All IP for each domain name
         Log.d(TAG, "Input domainName : " + domainName);
         try {
-            ipList = network.getAllByName(domainName);
-        } catch (Exception e) {
-            Log.e(TAG, "Exception when querying IP address : " + e);
-            return;
-        }
+            CompletableFuture<List<InetAddress>> result = new CompletableFuture();
+            final DnsResolver.Callback<List<InetAddress>> cb =
+                    new DnsResolver.Callback<List<InetAddress>>() {
+                        @Override
+                        public void onAnswer(
+                                @NonNull final List<InetAddress> answer, final int rcode) {
+                            if (rcode != 0) {
+                                Log.e(TAG, "DnsResolver Response Code = " + rcode);
+                            }
+                            result.complete(answer);
+                        }
 
-        if (ipList == null) {
-            Log.e(TAG, "Get empty IP address list");
-            return;
-        }
+                        @Override
+                        public void onError(@Nullable final DnsResolver.DnsException error) {
+                            Log.e(TAG, "Resolve DNS with error : " + error);
+                            result.completeExceptionally(error);
+                        }
+                    };
+            DnsResolver.getInstance()
+                    .query(network, domainName, DnsResolver.FLAG_EMPTY, r -> r.run(), null, cb);
 
-        // Filter the IP list by input ProtoFilter
-        for (InetAddress ipAddress : ipList) {
-            switch (filter) {
-                case PROTO_FILTER_IPV4:
-                    if (ipAddress instanceof Inet4Address) {
+            // Filter the IP list by input ProtoFilter
+            for (InetAddress ipAddress : result.get()) {
+                switch (filter) {
+                    case PROTO_FILTER_IPV4:
+                        if (ipAddress instanceof Inet4Address) {
+                            validIpList.add(ipAddress);
+                        }
+                        break;
+                    case PROTO_FILTER_IPV6:
+                        if (ipAddress instanceof Inet6Address) {
+                            validIpList.add(ipAddress);
+                        }
+                        break;
+                    case PROTO_FILTER_IPV4V6:
                         validIpList.add(ipAddress);
-                    }
-                    break;
-                case PROTO_FILTER_IPV6:
-                    if (ipAddress instanceof Inet6Address) {
-                        validIpList.add(ipAddress);
-                    }
-                    break;
-                case PROTO_FILTER_IPV4V6:
-                    validIpList.add(ipAddress);
-                    break;
-                default:
-                    Log.d(TAG, "Invalid ProtoFilter : " + filter);
+                        break;
+                    default:
+                        Log.d(TAG, "Invalid ProtoFilter : " + filter);
+                }
             }
+        } catch (Exception e) {
+            Log.e(TAG, "Exception when resolving domainName : " + domainName + ".", e);
         }
     }
 
