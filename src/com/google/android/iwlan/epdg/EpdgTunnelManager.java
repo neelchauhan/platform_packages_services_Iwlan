@@ -1332,15 +1332,20 @@ public class EpdgTunnelManager {
                     int forceClose = msg.arg1;
                     tunnelConfig = mApnNameToTunnelConfig.get(apnName);
                     if (tunnelConfig == null) {
-                        Log.d(TAG, "Bringdown request: No tunnel exists for apn: " + apnName);
+                        Log.d(
+                                TAG,
+                                "Bringdown request: No tunnel exists for apn: "
+                                        + apnName
+                                        + "forced: "
+                                        + forceClose);
                     } else {
                         if (forceClose == 1) {
                             tunnelConfig.getIkeSession().kill();
                         } else {
                             tunnelConfig.getIkeSession().close();
                         }
+                        closePendingRequestsForApn(apnName);
                     }
-                    closePendingRequestsForApn(apnName);
                     break;
 
                 case EVENT_IPSEC_TRANSFORM_CREATED:
@@ -1760,6 +1765,7 @@ public class EpdgTunnelManager {
         mApnNameToTunnelConfig.put(
                 apnName,
                 new TunnelConfig(ikeSession, tunnelCallback, srcIpv6Addr, srcIPv6AddrPrefixLen));
+        Log.d(TAG, "Added apn: " + apnName + " to TunnelConfig");
     }
 
     @VisibleForTesting
