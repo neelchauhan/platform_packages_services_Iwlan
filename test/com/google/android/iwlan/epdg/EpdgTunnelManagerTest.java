@@ -245,7 +245,6 @@ public class EpdgTunnelManagerTest {
 
         boolean ret = mEpdgTunnelManager.closeTunnel(testApnName, false /*forceClose*/);
         assertTrue(ret);
-        verify(mEpdgTunnelManager).closePendingRequestsForApn(eq(testApnName));
     }
 
     @Test

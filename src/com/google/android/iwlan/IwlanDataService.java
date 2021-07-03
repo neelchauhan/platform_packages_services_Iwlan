@@ -1019,7 +1019,9 @@ public class IwlanDataService extends DataService {
                         TunnelState tunnelState = entry.getValue();
                         if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGUP) {
                             // force close tunnels in bringup since IKE lib only supports
-                            // updating network for tunnels that are already up
+                            // updating network for tunnels that are already up.
+                            // This may not result in actual closing of Ike Session since
+                            // epdg selection may not be complete yet.
                             getTunnelManager().closeTunnel(entry.getKey(), true);
                         } else {
                             if (mIwlanDataService.isNetworkConnected(
@@ -1103,7 +1105,7 @@ public class IwlanDataService extends DataService {
     }
 
     @VisibleForTesting
-    static boolean isNetworkConnected(boolean isDds, boolean isCstEnabled) {
+    static synchronized boolean isNetworkConnected(boolean isDds, boolean isCstEnabled) {
         if (!isDds && isCstEnabled) {
             // Only Non-DDS sub with CST enabled, can use any transport.
             return sNetworkConnected;
@@ -1115,7 +1117,7 @@ public class IwlanDataService extends DataService {
 
     @VisibleForTesting
     /* Note: this api should have valid transport if networkConnected==true */
-    static void setNetworkConnected(
+    static synchronized void setNetworkConnected(
             boolean networkConnected, Network network, Transport transport) {
         boolean hasNetworkChanged = false;
         sNetworkConnected = networkConnected;
