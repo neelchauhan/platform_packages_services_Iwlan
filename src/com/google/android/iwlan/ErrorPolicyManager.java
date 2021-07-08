@@ -960,6 +960,7 @@ public class ErrorPolicyManager {
 
         void setBackOffTime(long backOffTime) {
             mBackOffTime = backOffTime;
+            mLastErrorTime = new Date().getTime();
         }
 
         boolean canBringUpTunnel() {
