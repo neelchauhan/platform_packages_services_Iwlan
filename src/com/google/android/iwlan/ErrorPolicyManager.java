@@ -359,7 +359,7 @@ public class ErrorPolicyManager {
                         ret = DataFailCause.IWLAN_UNAUTHENTICATED_EMERGENCY_NOT_SUPPORTED;
                         break;
                     default:
-                        ret = DataFailCause.ERROR_UNSPECIFIED;
+                        ret = DataFailCause.IWLAN_NETWORK_FAILURE;
                         break;
                 }
             }
