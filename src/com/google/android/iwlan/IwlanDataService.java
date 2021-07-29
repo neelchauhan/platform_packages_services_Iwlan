@@ -205,6 +205,7 @@ public class IwlanDataService extends DataService {
             static final int TUNNEL_IN_BRINGUP = 2;
             static final int TUNNEL_UP = 3;
             static final int TUNNEL_IN_BRINGDOWN = 4;
+            static final int TUNNEL_IN_FORCE_CLEAN_WAS_IN_BRINGUP = 5;
             private DataServiceCallback dataServiceCallback;
             private int mState;
             private int mPduSessionId;
@@ -304,6 +305,9 @@ public class IwlanDataService extends DataService {
                     case TUNNEL_IN_BRINGDOWN:
                         tunnelState = "IN BRINGDOWN";
                         break;
+                    case TUNNEL_IN_FORCE_CLEAN_WAS_IN_BRINGUP:
+                        tunnelState = "IN FORCE CLEAN WAS IN BRINGUP";
+                        break;
                 }
                 sb.append("\tCurrent State of this tunnel: " + mState + " " + tunnelState);
                 sb.append("\n\tTunnel state is in Handover: " + mIsHandover);
@@ -363,7 +367,9 @@ public class IwlanDataService extends DataService {
                     mTunnelStats.reportTunnelDown(apnName, tunnelState);
                     mTunnelStateForApn.remove(apnName);
 
-                    if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGUP) {
+                    if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGUP
+                            || tunnelState.getState()
+                                    == TunnelState.TUNNEL_IN_FORCE_CLEAN_WAS_IN_BRINGUP) {
                         DataCallResponse.Builder respBuilder = new DataCallResponse.Builder();
                         respBuilder
                                 .setId(apnName.hashCode())
@@ -379,12 +385,18 @@ public class IwlanDataService extends DataService {
                                             .HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_SETUP_NORMAL);
                         }
 
-                        respBuilder.setCause(
-                                ErrorPolicyManager.getInstance(mContext, getSlotIndex())
-                                        .getDataFailCause(apnName));
-                        respBuilder.setRetryDurationMillis(
-                                ErrorPolicyManager.getInstance(mContext, getSlotIndex())
-                                        .getCurrentRetryTimeMs(apnName));
+                        if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGUP) {
+                            respBuilder.setCause(
+                                    ErrorPolicyManager.getInstance(mContext, getSlotIndex())
+                                            .getDataFailCause(apnName));
+                            respBuilder.setRetryDurationMillis(
+                                    ErrorPolicyManager.getInstance(mContext, getSlotIndex())
+                                            .getCurrentRetryTimeMs(apnName));
+                        } else if (tunnelState.getState()
+                                == TunnelState.TUNNEL_IN_FORCE_CLEAN_WAS_IN_BRINGUP) {
+                            respBuilder.setCause(DataFailCause.IWLAN_NETWORK_FAILURE);
+                            respBuilder.setRetryDurationMillis(5000);
+                        }
 
                         deliverCallback(
                                 CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
@@ -1022,6 +1034,7 @@ public class IwlanDataService extends DataService {
                             // updating network for tunnels that are already up.
                             // This may not result in actual closing of Ike Session since
                             // epdg selection may not be complete yet.
+                            tunnelState.setState(TunnelState.TUNNEL_IN_FORCE_CLEAN_WAS_IN_BRINGUP);
                             getTunnelManager().closeTunnel(entry.getKey(), true);
                         } else {
                             if (mIwlanDataService.isNetworkConnected(
@@ -1170,7 +1183,7 @@ public class IwlanDataService extends DataService {
             sDefaultDataTransport = transport;
             sNetwork = network;
             if (!networkConnected) {
-                //reset link protocol type
+                // reset link protocol type
                 sLinkProtocolType = LinkProtocolType.UNKNOWN;
             }
         }
