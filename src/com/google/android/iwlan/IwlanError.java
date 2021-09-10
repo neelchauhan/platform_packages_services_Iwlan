@@ -24,7 +24,6 @@ import android.support.annotation.NonNull;
 
 import java.io.IOException;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class IwlanError {
@@ -210,11 +209,6 @@ public class IwlanError {
             }
         }
         return ret;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(mErrorType, mException);
     }
 }
 ;

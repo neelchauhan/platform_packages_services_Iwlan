@@ -68,7 +68,6 @@ import com.android.internal.annotations.VisibleForTesting;
 
 import com.google.android.iwlan.ErrorPolicyManager;
 import com.google.android.iwlan.IwlanError;
-import com.google.android.iwlan.IwlanErrorReporter;
 import com.google.android.iwlan.IwlanHelper;
 
 import java.io.FileDescriptor;
@@ -144,7 +143,6 @@ public class EpdgTunnelManager {
     private int mTransactionId = 0;
     private boolean mIsEpdgAddressSelected;
     private IkeSessionCreator mIkeSessionCreator;
-    private IwlanErrorReporter mIwlanErrorReporter;
 
     private Map<String, TunnelConfig> mApnNameToTunnelConfig = new ConcurrentHashMap<>();
 
@@ -604,7 +602,6 @@ public class EpdgTunnelManager {
         mIkeSessionCreator = new IkeSessionCreator();
         TAG = EpdgTunnelManager.class.getSimpleName() + "[" + mSlotId + "]";
         initHandler();
-        mIwlanErrorReporter = new IwlanErrorReporter(context);
     }
 
     @VisibleForTesting
@@ -1191,8 +1188,6 @@ public class EpdgTunnelManager {
         }
 
         tunnelConfig.setError(new IwlanError(exception));
-
-        mIwlanErrorReporter.broadcastIwlanTunnelBringupErrorString(tunnelConfig.getError());
 
         if (sessionType == EVENT_CHILD_SESSION_CLOSED) {
             tunnelConfig.getIkeSession().close();
