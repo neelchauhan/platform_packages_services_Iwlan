@@ -21,7 +21,8 @@ android_app {
         "auto_value_annotations",
         "framework-annotations-lib",
         "framework-connectivity",
-        "framework-wifi"
+        "framework-wifi",
+        "modules-utils-handlerexecutor"
     ],
 
     plugins: ["auto_value_plugin"],
