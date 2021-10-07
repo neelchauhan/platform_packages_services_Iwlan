@@ -26,7 +26,10 @@ import android.net.LinkAddress;
 import android.net.LinkProperties;
 import android.net.Network;
 import android.os.PersistableBundle;
+import android.telephony.AccessNetworkConstants;
 import android.telephony.CarrierConfigManager;
+import android.telephony.NetworkRegistrationInfo;
+import android.telephony.ServiceState;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
@@ -197,6 +200,73 @@ public class IwlanHelper {
         return false;
     }
 
+    private static boolean isNetworkServiceRegistered(Context context, int slotId) {
+        TelephonyManager tm = context.getSystemService(TelephonyManager.class);
+        tm = tm.createForSubscriptionId(getSubId(context, slotId));
+        if (tm != null) {
+            ServiceState ss = tm.getServiceState();
+            NetworkRegistrationInfo psState =
+                    ss.getNetworkRegistrationInfo(
+                            NetworkRegistrationInfo.DOMAIN_PS,
+                            AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
+            NetworkRegistrationInfo csState =
+                    ss.getNetworkRegistrationInfo(
+                            NetworkRegistrationInfo.DOMAIN_CS,
+                            AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
+            // Return true if the slot has PS or CS service.
+            if ((psState != null && psState.isRegistered())
+                    || (csState != null && csState.isRegistered())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int getPreferredOpportunisticDataSubId(Context context, int slotId) {
+        TelephonyManager tm = context.getSystemService(TelephonyManager.class);
+        tm = tm.createForSubscriptionId(getSubId(context, slotId));
+        return tm != null
+                ? tm.getPreferredOpportunisticDataSubscription()
+                : SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+    }
+
+    public static boolean isPreferredOpportunisticDataSub(Context context, int slotId) {
+        int subId = getSubId(context, slotId);
+        if (subId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+            int preferredOpportunisticDataSubId =
+                    getPreferredOpportunisticDataSubId(context, slotId);
+            if (preferredOpportunisticDataSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                return (subId == preferredOpportunisticDataSubId);
+            }
+        }
+        return false;
+    }
+
+    private static boolean isOpportunistic(Context context, int slotId) {
+        int preferredOpportunisticDataSubId = getPreferredOpportunisticDataSubId(context, slotId);
+        SubscriptionManager sm = context.getSystemService(SubscriptionManager.class);
+        if (sm != null
+                && preferredOpportunisticDataSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+            SubscriptionInfo info =
+                    sm.from(context).getActiveSubscriptionInfo(preferredOpportunisticDataSubId);
+            return info != null && info.isOpportunistic();
+        }
+        return false;
+    }
+
+    public static boolean isBackupCallOpportunisticDataPreferred(Context context, int slotId) {
+        boolean isBackupCallOpportunisticDataEnabled =
+                getConfig(
+                        CarrierConfigManager
+                                .KEY_ENABLE_CROSS_SIM_CALLING_ON_OPPORTUNISTIC_DATA_BOOL,
+                        context,
+                        slotId);
+        return isBackupCallOpportunisticDataEnabled
+                && isOpportunistic(context, slotId)
+                && isNetworkServiceRegistered(context, slotId)
+                && (!isPreferredOpportunisticDataSub(context, slotId));
+    }
+
     public static boolean isCrossSimCallingEnabled(Context context, int slotId) {
         boolean isCstEnabled = false;
         int subid = getSubId(context, slotId);
@@ -204,6 +274,9 @@ public class IwlanHelper {
         if (subid == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
             // Fail to query subscription id, just return false.
             return false;
+        }
+        if (isBackupCallOpportunisticDataPreferred(context, slotId)) {
+            return true;
         }
 
         ImsManager imsManager = context.getSystemService(ImsManager.class);
