@@ -35,6 +35,7 @@ import android.telephony.CellInfoWcdma;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
+import android.text.TextUtils;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -306,8 +307,7 @@ public class EpdgSelector {
         // Get the static domain names from carrier config
         // Config obtained in form of a list of domain names separated by
         // a delimeter is only used for testing purpose.
-        // TODO: need to consider APM on/no cellular condition.
-        if (isRoaming && !inSameCountry()) {
+        if (!inSameCountry()) {
             domainNames =
                     getDomainNames(
                             CarrierConfigManager.Iwlan.KEY_EPDG_STATIC_ADDRESS_ROAMING_STRING);
@@ -344,11 +344,8 @@ public class EpdgSelector {
 
         if (tm != null) {
             String simCountry = tm.getSimCountryIso();
-            String currentCountry = tm.getNetworkCountryIso();
-            if (simCountry != null
-                    && !simCountry.isEmpty()
-                    && currentCountry != null
-                    && !currentCountry.isEmpty()) {
+            String currentCountry = IwlanHelper.getLastKnownCountryCode(mContext);
+            if (!TextUtils.isEmpty(simCountry) && !TextUtils.isEmpty(currentCountry)) {
                 Log.d(TAG, "simCountry = " + simCountry + ", currentCountry = " + currentCountry);
                 inSameCountry = simCountry.equalsIgnoreCase(currentCountry);
             }

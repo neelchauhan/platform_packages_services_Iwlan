@@ -27,6 +27,7 @@ import static org.mockito.Mockito.*;
 import static java.util.stream.Collectors.toList;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.net.DnsResolver;
 import android.net.InetAddresses;
 import android.net.Network;
@@ -89,7 +90,7 @@ public class EpdgSelectorTest {
     @Mock private SubscriptionInfo mMockSubscriptionInfo;
     @Mock private CarrierConfigManager mMockCarrierConfigManager;
     @Mock private TelephonyManager mMockTelephonyManager;
-
+    @Mock private SharedPreferences mMockSharedPreferences;
     @Mock private CellInfoGsm mMockCellInfoGsm;
     @Mock private CellIdentityGsm mMockCellIdentityGsm;
     @Mock private CellInfoWcdma mMockCellInfoWcdma;
@@ -130,6 +131,13 @@ public class EpdgSelectorTest {
         ehplmnList.add("300120");
         when(mMockTelephonyManager.getEquivalentHomePlmns()).thenReturn(ehplmnList);
 
+        when(mMockTelephonyManager.getSimCountryIso()).thenReturn("ca");
+
+        when(mMockContext.getSharedPreferences(anyString(), anyInt()))
+                .thenReturn(mMockSharedPreferences);
+
+        when(mMockSharedPreferences.getString(any(), any())).thenReturn("US");
+
         // Mock carrier configs with test bundle
         mTestBundle = new PersistableBundle();
         when(mMockContext.getSystemService(eq(CarrierConfigManager.class)))
@@ -160,6 +168,29 @@ public class EpdgSelectorTest {
                 new int[] {CarrierConfigManager.Iwlan.EPDG_ADDRESS_STATIC});
         mTestBundle.putString(
                 CarrierConfigManager.Iwlan.KEY_EPDG_STATIC_ADDRESS_STRING, testStaticAddress);
+
+        ArrayList<InetAddress> testInetAddresses =
+                getValidatedServerListWithDefaultParams(false /*isEmergency*/);
+
+        InetAddress expectedAddress = InetAddress.getByName(TEST_IP_ADDRESS);
+
+        assertEquals(testInetAddresses.size(), 1);
+        assertEquals(testInetAddresses.get(0), expectedAddress);
+    }
+
+    @Test
+    public void testRoamStaticMethodPass() throws Exception {
+        // Set DnsResolver query mock
+        final String testRoamStaticAddress = "epdg.epc.mnc088.mcc888.pub.3gppnetwork.org";
+        mFakeDns.setAnswer(testRoamStaticAddress, new String[] {TEST_IP_ADDRESS}, TYPE_A);
+
+        // Set carrier config mock
+        mTestBundle.putIntArray(
+                CarrierConfigManager.Iwlan.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
+                new int[] {CarrierConfigManager.Iwlan.EPDG_ADDRESS_STATIC});
+        mTestBundle.putString(
+                CarrierConfigManager.Iwlan.KEY_EPDG_STATIC_ADDRESS_ROAMING_STRING,
+                testRoamStaticAddress);
 
         ArrayList<InetAddress> testInetAddresses =
                 getValidatedServerListWithDefaultParams(false /*isEmergency*/);
