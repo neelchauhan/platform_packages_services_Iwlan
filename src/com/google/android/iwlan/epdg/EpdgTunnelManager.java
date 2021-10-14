@@ -58,6 +58,7 @@ import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.telephony.CarrierConfigManager;
 import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
@@ -123,6 +124,9 @@ public class EpdgTunnelManager {
     private static final int IKE_DPD_DELAY_SEC_MAX = 1800; // 30 minutes
     private static final int NATT_KEEPALIVE_DELAY_SEC_MIN = 10;
     private static final int NATT_KEEPALIVE_DELAY_SEC_MAX = 120;
+
+    private static final int DEVICE_IMEI_LEN = 15;
+    private static final int DEVICE_IMEISV_SUFFIX_LEN = 2;
 
     private static final int TRAFFIC_SELECTOR_START_PORT = 0;
     private static final int TRAFFIC_SELECTOR_END_PORT = 65535;
@@ -876,6 +880,28 @@ public class EpdgTunnelManager {
         return mApnNameToTunnelConfig.size();
     }
 
+    // Returns the IMEISV or device IMEI, in that order of priority.
+    private @Nullable String getMobileDeviceIdentity() {
+        TelephonyManager telephonyManager = mContext.getSystemService(TelephonyManager.class);
+        telephonyManager = telephonyManager.createForSubscriptionId(mSlotId);
+        if (telephonyManager == null) {
+            return null;
+        }
+        // Queries the 15-digit device IMEI.
+        String imei = telephonyManager.getImei();
+        if (imei == null || imei.length() != DEVICE_IMEI_LEN) {
+            Log.i(TAG, "Unable to query valid Mobile Device Identity (IMEI)!");
+            return null;
+        }
+        String imeisv_suffix = telephonyManager.getDeviceSoftwareVersion();
+        if (imeisv_suffix == null || imeisv_suffix.length() != DEVICE_IMEISV_SUFFIX_LEN) {
+            // Unable to retrieve 2-digit suffix for IMEISV, so returns device IMEI.
+            return imei;
+        }
+        // Splices the first 14 digit of device IMEI with 2-digit SV suffix to form IMEISV.
+        return imei.substring(0, imei.length() - 1) + imeisv_suffix;
+    }
+
     private IkeSessionParams buildIkeSessionParams(
             TunnelSetupRequest setupRequest, String apnName) {
         int hardTimeSeconds =
@@ -945,13 +971,27 @@ public class EpdgTunnelManager {
             }
         }
 
+        Ike3gppParams.Builder builder3gppParams = null;
+
+        String imei = getMobileDeviceIdentity();
+        if (imei != null) {
+            if (builder3gppParams == null) {
+                builder3gppParams = new Ike3gppParams.Builder();
+            }
+            Log.d(TAG, "DEVICE_IDENTITY set in Ike3gppParams");
+            builder3gppParams.setMobileDeviceIdentity(imei);
+        }
+
         if (setupRequest.pduSessionId() != 0) {
-            Ike3gppParams extParams =
-                    new Ike3gppParams.Builder()
-                            .setPduSessionId((byte) setupRequest.pduSessionId())
-                            .build();
+            if (builder3gppParams == null) {
+                builder3gppParams = new Ike3gppParams.Builder();
+            }
+            builder3gppParams.setPduSessionId((byte) setupRequest.pduSessionId());
+        }
+
+        if (builder3gppParams != null) {
             Ike3gppExtension extension =
-                    new Ike3gppExtension(extParams, new TmIke3gppCallback(apnName));
+                    new Ike3gppExtension(builder3gppParams.build(), new TmIke3gppCallback(apnName));
             builder.setIke3gppExtension(extension);
         }
 
