@@ -1206,6 +1206,7 @@ public class IwlanDataService extends DataService {
                     dp.dnsPrefetchCheck();
                     dp.updateNetwork(sNetwork);
                 }
+                IwlanHelper.updateCountryCodeWhenNetworkConnected();
             }
         } else {
             for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
@@ -1341,6 +1342,7 @@ public class IwlanDataService extends DataService {
     public void onCreate() {
         setAppContext(getApplicationContext());
         IwlanBroadcastReceiver.startListening(mContext);
+        IwlanHelper.startCountryDetector(mContext);
     }
 
     @Override
