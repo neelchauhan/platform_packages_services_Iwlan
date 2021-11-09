@@ -872,6 +872,10 @@ public class EpdgTunnelManager {
                 InetAddresses.parseNumericAddress(TRAFFIC_SELECTOR_IPV6_END_ADDR));
     }
 
+    private int numPdnTunnels() {
+        return mApnNameToTunnelConfig.size();
+    }
+
     private IkeSessionParams buildIkeSessionParams(
             TunnelSetupRequest setupRequest, String apnName) {
         int hardTimeSeconds =
@@ -920,6 +924,11 @@ public class EpdgTunnelManager {
                         .setLifetimeSeconds(hardTimeSeconds, softTimeSeconds)
                         .setRetransmissionTimeoutsMillis(getRetransmissionTimeoutsFromConfig())
                         .setDpdDelaySeconds(getDpdDelayFromConfig());
+
+        if (numPdnTunnels() == 0) {
+            builder.addIkeOption(IkeSessionParams.IKE_OPTION_INITIAL_CONTACT);
+            Log.d(TAG, "IKE_OPTION_INITIAL_CONTACT");
+        }
 
         if ((int) getConfig(CarrierConfigManager.Iwlan.KEY_EPDG_AUTHENTICATION_METHOD_INT)
                 == CarrierConfigManager.Iwlan.AUTHENTICATION_METHOD_EAP_ONLY) {
