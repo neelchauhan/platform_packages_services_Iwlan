@@ -28,7 +28,9 @@ import android.os.Looper;
 import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
 import android.telephony.CarrierConfigManager;
+import android.telephony.CellInfo;
 import android.telephony.SubscriptionManager;
+import android.telephony.TelephonyCallback;
 import android.telephony.TelephonyManager;
 import android.telephony.ims.ImsManager;
 import android.telephony.ims.ImsMmTelManager;
@@ -79,6 +81,9 @@ public class IwlanEventListener {
      */
     public static final int CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT = 10;
 
+    /** On Cellinfo changed */
+    public static final int CELLINFO_CHANGED_EVENT = 11;
+
     @IntDef({
         CARRIER_CONFIG_CHANGED_EVENT,
         WIFI_DISABLE_EVENT,
@@ -89,7 +94,8 @@ public class IwlanEventListener {
         WIFI_CALLING_DISABLE_EVENT,
         CROSS_SIM_CALLING_ENABLE_EVENT,
         CROSS_SIM_CALLING_DISABLE_EVENT,
-        CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT
+        CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT,
+        CELLINFO_CHANGED_EVENT
     })
     @interface IwlanEventType {};
 
@@ -109,6 +115,7 @@ public class IwlanEventListener {
     private Uri mWfcEnabledUri;
     private UserSettingContentObserver mUserSettingContentObserver;
     private HandlerThread mUserSettingHandlerThread;
+    private RadioInfoTelephonyCallback mTelephonyCallback;
 
     SparseArray<Set<Handler>> eventHandlers = new SparseArray<>();
 
@@ -123,6 +130,22 @@ public class IwlanEventListener {
                 getCurrentUriSetting(uri);
             } else if (mWfcEnabledUri.equals(uri)) {
                 getCurrentUriSetting(uri);
+            }
+        }
+    }
+
+    private class RadioInfoTelephonyCallback extends TelephonyCallback
+            implements TelephonyCallback.CellInfoListener {
+        @Override
+        public void onCellInfoChanged(List<CellInfo> arrayCi) {
+            Log.d(LOG_TAG, "Cellinfo changed");
+
+            int event = CELLINFO_CHANGED_EVENT;
+            for (Map.Entry<Integer, IwlanEventListener> entry : mInstances.entrySet()) {
+                IwlanEventListener instance = entry.getValue();
+                if (instance != null) {
+                    instance.updateHandlers(event, arrayCi);
+                }
             }
         }
     }
@@ -214,6 +237,7 @@ public class IwlanEventListener {
                     if (carrierId != TelephonyManager.UNKNOWN_CARRIER_ID) {
                         event = CARRIER_CONFIG_CHANGED_EVENT;
                         getInstance(context, slotId).registerContentObserver();
+                        getInstance(context, slotId).registerTelephonyCallback();
                     } else {
                         event = CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT;
                     }
@@ -324,6 +348,9 @@ public class IwlanEventListener {
             case "CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT":
                 ret = CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT;
                 break;
+            case "CELLINFO_CHANGED_EVENT":
+                ret = CELLINFO_CHANGED_EVENT;
+                break;
         }
         return ret;
     }
@@ -407,6 +434,16 @@ public class IwlanEventListener {
     }
 
     @VisibleForTesting
+    void registerTelephonyCallback() {
+        Log.d(SUB_TAG, "registerTelephonyCallback");
+        TelephonyManager telephonyManager = mContext.getSystemService(TelephonyManager.class);
+        telephonyManager =
+                telephonyManager.createForSubscriptionId(IwlanHelper.getSubId(mContext, mSlotId));
+        mTelephonyCallback = new RadioInfoTelephonyCallback();
+        telephonyManager.registerTelephonyCallback(r -> r.run(), mTelephonyCallback);
+    }
+
+    @VisibleForTesting
     void setCrossSimCallingUri(Uri uri) {
         mCrossSimCallingUri = uri;
     }
@@ -416,11 +453,25 @@ public class IwlanEventListener {
         mWfcEnabledUri = uri;
     }
 
+    @VisibleForTesting
+    RadioInfoTelephonyCallback getTelephonyCallback() {
+        return mTelephonyCallback;
+    }
+
     private synchronized void updateHandlers(int event) {
         if (eventHandlers.contains(event)) {
             Log.d(SUB_TAG, "Updating handlers for the event: " + event);
             for (Handler handler : eventHandlers.get(event)) {
                 handler.obtainMessage(event).sendToTarget();
+            }
+        }
+    }
+
+    private synchronized void updateHandlers(int event, List<CellInfo> arrayCi) {
+        if (eventHandlers.contains(event)) {
+            Log.d(SUB_TAG, "Updating handlers for the event: " + event);
+            for (Handler handler : eventHandlers.get(event)) {
+                handler.obtainMessage(event, arrayCi).sendToTarget();
             }
         }
     }
