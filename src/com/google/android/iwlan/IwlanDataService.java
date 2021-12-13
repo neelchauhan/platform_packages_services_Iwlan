@@ -470,7 +470,7 @@ public class IwlanDataService extends DataService {
                         Log.d(TAG, "On CELLINFO_CHANGED_EVENT");
                         List<CellInfo> cellInfolist = (List<CellInfo>) msg.obj;
 
-                        if (isRegisteredCellInfoChanged(cellInfolist)) {
+                        if (cellInfolist != null && isRegisteredCellInfoChanged(cellInfolist)) {
                             int[] addrResolutionMethods =
                                     IwlanHelper.getConfig(
                                             CarrierConfigManager.Iwlan
