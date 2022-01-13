@@ -862,18 +862,7 @@ public class IwlanDataService extends DataService {
                 boolean isDDS = IwlanHelper.isDefaultDataSlot(mContext, getSlotIndex());
                 boolean isCSTEnabled =
                         IwlanHelper.isCrossSimCallingEnabled(mContext, getSlotIndex());
-                boolean networkConnected;
-                final boolean isBackupCallOpportunisticDataPreferred =
-                        IwlanHelper.isBackupCallOpportunisticDataPreferred(
-                                mContext, getSlotIndex());
-                if (isBackupCallOpportunisticDataPreferred) {
-                    final boolean isPreferredOpportunisticDataSub =
-                            IwlanHelper.isPreferredOpportunisticDataSub(mContext, getSlotIndex());
-                    networkConnected =
-                            isNetworkConnected(isPreferredOpportunisticDataSub, isCSTEnabled);
-                } else {
-                    networkConnected = isNetworkConnected(isDDS, isCSTEnabled);
-                }
+                boolean networkConnected = isNetworkConnected(isDDS, isCSTEnabled);
                 Log.d(
                         SUB_TAG,
                         "isDds: "
@@ -881,9 +870,7 @@ public class IwlanDataService extends DataService {
                                 + ", isCstEnabled: "
                                 + isCSTEnabled
                                 + ", transport: "
-                                + sDefaultDataTransport
-                                + ", isBackupCallOpportunisticDataPreferred: "
-                                + isBackupCallOpportunisticDataPreferred);
+                                + sDefaultDataTransport);
 
                 if (networkConnected == false
                         || mTunnelStateForApn.get(dataProfile.getApn()) != null) {
@@ -1155,15 +1142,6 @@ public class IwlanDataService extends DataService {
                             + isNetworkConnected(isDDS, isCSTEnabled)
                             + " Wfc enabled: "
                             + mWfcEnabled);
-            final boolean isPreferredOpportunisticDataSub =
-                    IwlanHelper.isPreferredOpportunisticDataSub(mContext, getSlotIndex());
-            final boolean isBackupCallOpportunisticDataPreferred =
-                    IwlanHelper.isBackupCallOpportunisticDataPreferred(mContext, getSlotIndex());
-            pw.println(
-                    "isPreferredOpportunisticDataSub: "
-                            + isPreferredOpportunisticDataSub
-                            + " isBackupCallOpportunisticDataPreferred: "
-                            + isBackupCallOpportunisticDataPreferred);
             synchronized (mTunnelStateForApn) {
                 for (Map.Entry<String, TunnelState> entry : mTunnelStateForApn.entrySet()) {
                     pw.println("Tunnel state for APN: " + entry.getKey());
