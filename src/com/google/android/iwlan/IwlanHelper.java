@@ -38,6 +38,7 @@ import android.util.Log;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -47,7 +48,11 @@ public class IwlanHelper {
     private static CountryDetector mCountryDetector;
     private static final String LAST_KNOWN_COUNTRY_CODE_KEY = "last_known_country_code";
 
-    public static String getNai(Context context, int slotId) {
+    public static String getNai(Context context, int slotId, byte[] nextReauthId) {
+        if (nextReauthId != null) {
+            return new String(nextReauthId, StandardCharsets.UTF_8);
+        }
+
         StringBuilder naiBuilder = new StringBuilder();
         TelephonyManager tm = context.getSystemService(TelephonyManager.class);
         SubscriptionInfo subInfo = null;
