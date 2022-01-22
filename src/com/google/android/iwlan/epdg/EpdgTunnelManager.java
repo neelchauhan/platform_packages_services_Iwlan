@@ -28,6 +28,8 @@ import android.net.IpSecManager;
 import android.net.IpSecTransform;
 import android.net.LinkAddress;
 import android.net.Network;
+import android.net.eap.EapAkaInfo;
+import android.net.eap.EapInfo;
 import android.net.eap.EapSessionConfig;
 import android.net.ipsec.ike.ChildSaProposal;
 import android.net.ipsec.ike.ChildSessionCallback;
@@ -153,6 +155,8 @@ public class EpdgTunnelManager {
     private final String TAG;
 
     private List<InetAddress> mLocalAddresses;
+
+    @Nullable private byte[] mNextReauthId = null;
 
     private static final Set<Integer> VALID_DH_GROUPS;
     private static final Set<Integer> VALID_KEY_LENGTHS;
@@ -431,6 +435,25 @@ public class EpdgTunnelManager {
             Log.d(TAG, "Ike session opened for apn: " + mApnName);
             TunnelConfig tunnelConfig = mApnNameToTunnelConfig.get(mApnName);
             tunnelConfig.setPcscfAddrList(sessionConfiguration.getPcscfServers());
+
+            boolean enabledFastReauth =
+                    (boolean)
+                            getConfig(
+                                    CarrierConfigManager.Iwlan
+                                            .KEY_SUPPORTS_EAP_AKA_FAST_REAUTH_BOOL);
+            Log.d(
+                    TAG,
+                    "CarrierConfigManager.Iwlan.KEY_SUPPORTS_EAP_AKA_FAST_REAUTH_BOOL "
+                            + enabledFastReauth);
+            if (enabledFastReauth) {
+                EapInfo eapInfo = sessionConfiguration.getEapInfo();
+                if (eapInfo != null && eapInfo instanceof EapAkaInfo) {
+                    mNextReauthId = ((EapAkaInfo) eapInfo).getReauthId();
+                    Log.d(TAG, "Update ReauthId: " + Arrays.toString(mNextReauthId));
+                } else {
+                    mNextReauthId = null;
+                }
+            }
         }
 
         @Override
@@ -442,12 +465,18 @@ public class EpdgTunnelManager {
         @Override
         public void onClosedExceptionally(IkeException exception) {
             Log.d(TAG, "Ike session onClosedExceptionally for apn: " + mApnName);
+
+            mNextReauthId = null;
+
             onSessionClosedWithException(exception, mApnName, EVENT_IKE_SESSION_CLOSED);
         }
 
         @Override
         public void onError(IkeProtocolException exception) {
             Log.d(TAG, "Ike session onError for apn: " + mApnName);
+
+            mNextReauthId = null;
+
             Log.d(
                     TAG,
                     "ErrorType:"
@@ -1175,7 +1204,9 @@ public class EpdgTunnelManager {
     }
 
     private IkeIdentification getLocalIdentification() {
-        String nai = IwlanHelper.getNai(mContext, mSlotId);
+        String nai;
+
+        nai = IwlanHelper.getNai(mContext, mSlotId, mNextReauthId);
 
         if (nai == null) {
             throw new IllegalArgumentException("Nai is null.");
@@ -1205,15 +1236,20 @@ public class EpdgTunnelManager {
 
     private EapSessionConfig getEapConfig() {
         int subId = IwlanHelper.getSubId(mContext, mSlotId);
-        String nai = IwlanHelper.getNai(mContext, mSlotId);
+        String nai = IwlanHelper.getNai(mContext, mSlotId, null);
 
         if (nai == null) {
             throw new IllegalArgumentException("Nai is null.");
         }
 
+        EapSessionConfig.EapAkaOption option = null;
+        if (mNextReauthId != null) {
+            option = new EapSessionConfig.EapAkaOption.Builder().setReauthId(mNextReauthId).build();
+        }
+
         Log.d(TAG, "getEapConfig: Nai: " + nai);
         return new EapSessionConfig.Builder()
-                .setEapAkaConfig(subId, TelephonyManager.APPTYPE_USIM)
+                .setEapAkaConfig(subId, TelephonyManager.APPTYPE_USIM, option)
                 .setEapIdentity(nai.getBytes(StandardCharsets.US_ASCII))
                 .build();
     }
