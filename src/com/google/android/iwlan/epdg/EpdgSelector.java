@@ -180,7 +180,7 @@ public class EpdgSelector {
                         }
                         break;
                     case PROTO_FILTER_IPV6:
-                        if (ipAddress instanceof Inet6Address) {
+                        if (!IwlanHelper.isIpv4EmbeddedIpv6Address(ipAddress)) {
                             validIpList.add(ipAddress);
                         }
                         break;
