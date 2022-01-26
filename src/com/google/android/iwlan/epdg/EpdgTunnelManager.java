@@ -147,6 +147,7 @@ public class EpdgTunnelManager {
     private InetAddress mEpdgAddress;
     private Network mNetwork;
     private int mTransactionId = 0;
+    private int mProtoFilter = EpdgSelector.PROTO_FILTER_IPV4V6;
     private boolean mIsEpdgAddressSelected;
     private IkeSessionCreator mIkeSessionCreator;
 
@@ -1448,10 +1449,17 @@ public class EpdgTunnelManager {
                         }
 
                         try {
+                            if (mEpdgAddress instanceof Inet4Address
+                                    && mProtoFilter == EpdgSelector.PROTO_FILTER_IPV6) {
+                                mLocalAddresses =
+                                        IwlanHelper.getStackedAddressesForNetwork(
+                                                mNetwork, mContext);
+                            }
                             InetAddress localAddress =
                                     (mEpdgAddress instanceof Inet4Address)
                                             ? IwlanHelper.getIpv4Address(mLocalAddresses)
                                             : IwlanHelper.getIpv6Address(mLocalAddresses);
+                            Log.d(TAG, "Local address = " + localAddress);
                             tunnelConfig.setIface(
                                     ipSecManager.createIpSecTunnelInterface(
                                             localAddress, mEpdgAddress, mNetwork));
@@ -1509,19 +1517,19 @@ public class EpdgTunnelManager {
             return;
         }
 
-        int protoFilter = EpdgSelector.PROTO_FILTER_IPV4V6;
+        mProtoFilter = EpdgSelector.PROTO_FILTER_IPV4V6;
         if (!IwlanHelper.hasIpv6Address(mLocalAddresses)) {
-            protoFilter = EpdgSelector.PROTO_FILTER_IPV4;
+            mProtoFilter = EpdgSelector.PROTO_FILTER_IPV4;
         }
         if (!IwlanHelper.hasIpv4Address(mLocalAddresses)) {
-            protoFilter = EpdgSelector.PROTO_FILTER_IPV6;
+            mProtoFilter = EpdgSelector.PROTO_FILTER_IPV6;
         }
 
         EpdgSelector epdgSelector = getEpdgSelector();
         IwlanError epdgError =
                 epdgSelector.getValidatedServerList(
                         ++mTransactionId,
-                        protoFilter,
+                        mProtoFilter,
                         setupRequest.isRoaming(),
                         setupRequest.isEmergency(),
                         mNetwork,
