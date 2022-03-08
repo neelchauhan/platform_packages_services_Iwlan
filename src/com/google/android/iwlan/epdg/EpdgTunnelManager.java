@@ -1320,6 +1320,13 @@ public class EpdgTunnelManager {
                     apnName = updatedNetwork.getApnName();
                     Network network = updatedNetwork.getNetwork();
                     tunnelConfig = mApnNameToTunnelConfig.get(apnName);
+
+                    // Update the global cache if they aren't equal
+                    if (!mNetwork.equals(network)) {
+                        Log.d(TAG, "Updating mNetwork to " + network);
+                        mNetwork = network;
+                    }
+
                     if (tunnelConfig == null) {
                         Log.d(TAG, "Update Network request: No tunnel exists for apn: " + apnName);
                     } else {
