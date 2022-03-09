@@ -1305,7 +1305,9 @@ public class EpdgTunnelManager {
                     }
 
                     // No tunnel bring up in progress and the epdg address is null
-                    if (!mIsEpdgAddressSelected && mApnNameToTunnelConfig.size() == 0) {
+                    if (!mIsEpdgAddressSelected
+                            && mApnNameToTunnelConfig.size() == 0
+                            && mRequestQueue.size() == 0) {
                         mNetwork = setupRequest.network();
                         mRequestQueue.add(tunnelRequestWrapper);
                         selectEpdgAddress(setupRequest);
@@ -1441,7 +1443,9 @@ public class EpdgTunnelManager {
                     tunnelConfig = mApnNameToTunnelConfig.get(apnName);
 
                     if (tunnelConfig.getIface() == null) {
-                        if (mLocalAddresses.size() == 0 || ipSecManager == null) {
+                        if (mLocalAddresses == null
+                                || mLocalAddresses.size() == 0
+                                || ipSecManager == null) {
                             Log.e(TAG, "No local addresses found.");
                             closeIkeSession(
                                     apnName, new IwlanError(IwlanError.TUNNEL_TRANSFORM_FAILED));
@@ -1510,7 +1514,7 @@ public class EpdgTunnelManager {
 
     private void selectEpdgAddress(TunnelSetupRequest setupRequest) {
         mLocalAddresses = getAddressForNetwork(mNetwork, mContext);
-        if (mLocalAddresses.size() == 0) {
+        if (mLocalAddresses == null || mLocalAddresses.size() == 0) {
             Log.e(TAG, "No local addresses available.");
             failAllPendingRequests(
                     new IwlanError(IwlanError.EPDG_SELECTOR_SERVER_SELECTION_FAILED));
