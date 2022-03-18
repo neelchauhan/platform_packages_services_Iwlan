@@ -460,7 +460,7 @@ public class EpdgTunnelManager {
         @Override
         public void onClosed() {
             Log.d(TAG, "Ike session closed for apn: " + mApnName);
-            mHandler.dispatchMessage(mHandler.obtainMessage(EVENT_IKE_SESSION_CLOSED, mApnName));
+            mHandler.sendMessage(mHandler.obtainMessage(EVENT_IKE_SESSION_CLOSED, mApnName));
         }
 
         @Override
@@ -572,7 +572,7 @@ public class EpdgTunnelManager {
                             .setIfaceName(tunnelConfig.getIface().getInterfaceName())
                             .setSliceInfo(tunnelConfig.getSliceInfo())
                             .build();
-            mHandler.dispatchMessage(
+            mHandler.sendMessage(
                     mHandler.obtainMessage(
                             EVENT_CHILD_SESSION_OPENED,
                             new TunnelOpenedData(mApnName, linkProperties)));
@@ -601,12 +601,12 @@ public class EpdgTunnelManager {
                 IpSecTransform inIpSecTransform, IpSecTransform outIpSecTransform) {
             // migration is similar to addition
             Log.d(TAG, "Transforms migrated for apn: + " + mApnName);
-            mHandler.dispatchMessage(
+            mHandler.sendMessage(
                     mHandler.obtainMessage(
                             EVENT_IPSEC_TRANSFORM_CREATED,
                             new IpsecTransformData(
                                     inIpSecTransform, IpSecManager.DIRECTION_IN, mApnName)));
-            mHandler.dispatchMessage(
+            mHandler.sendMessage(
                     mHandler.obtainMessage(
                             EVENT_IPSEC_TRANSFORM_CREATED,
                             new IpsecTransformData(
@@ -616,7 +616,7 @@ public class EpdgTunnelManager {
         @Override
         public void onIpSecTransformCreated(IpSecTransform ipSecTransform, int direction) {
             Log.d(TAG, "Transform created, direction: " + direction + ", apn:" + mApnName);
-            mHandler.dispatchMessage(
+            mHandler.sendMessage(
                     mHandler.obtainMessage(
                             EVENT_IPSEC_TRANSFORM_CREATED,
                             new IpsecTransformData(ipSecTransform, direction, mApnName)));
@@ -625,7 +625,7 @@ public class EpdgTunnelManager {
         @Override
         public void onIpSecTransformDeleted(IpSecTransform ipSecTransform, int direction) {
             Log.d(TAG, "Transform deleted, direction: " + direction + ", apn:" + mApnName);
-            mHandler.dispatchMessage(
+            mHandler.sendMessage(
                     mHandler.obtainMessage(EVENT_IPSEC_TRANSFORM_DELETED, ipSecTransform));
         }
     }
@@ -688,7 +688,7 @@ public class EpdgTunnelManager {
      * @return true if params are valid and tunnel exists. False otherwise.
      */
     public boolean closeTunnel(@NonNull String apnName, boolean forceClose) {
-        mHandler.dispatchMessage(
+        mHandler.sendMessage(
                 mHandler.obtainMessage(
                         EVENT_TUNNEL_BRINGDOWN_REQUEST,
                         forceClose ? 1 : 0,
@@ -708,8 +708,7 @@ public class EpdgTunnelManager {
      */
     public void updateNetwork(@NonNull Network network, String apnName) {
         UpdateNetworkWrapper updateNetworkWrapper = new UpdateNetworkWrapper(network, apnName);
-        mHandler.dispatchMessage(
-                mHandler.obtainMessage(EVENT_UPDATE_NETWORK, updateNetworkWrapper));
+        mHandler.sendMessage(mHandler.obtainMessage(EVENT_UPDATE_NETWORK, updateNetworkWrapper));
     }
     /**
      * Bring up epdg tunnel. Only one bring up request per apn is expected. All active tunnel
@@ -748,7 +747,7 @@ public class EpdgTunnelManager {
         TunnelRequestWrapper tunnelRequestWrapper =
                 new TunnelRequestWrapper(setupRequest, tunnelCallback);
 
-        mHandler.dispatchMessage(
+        mHandler.sendMessage(
                 mHandler.obtainMessage(EVENT_TUNNEL_BRINGUP_REQUEST, tunnelRequestWrapper));
 
         return true;
@@ -1280,7 +1279,7 @@ public class EpdgTunnelManager {
             return;
         }
 
-        mHandler.dispatchMessage(mHandler.obtainMessage(sessionType, apnName));
+        mHandler.sendMessage(mHandler.obtainMessage(sessionType, apnName));
     }
 
     private final class TmHandler extends Handler {
@@ -1899,7 +1898,7 @@ public class EpdgTunnelManager {
             ArrayList<InetAddress> validIPList, IwlanError result, int transactionId) {
         EpdgSelectorResult epdgSelectorResult =
                 new EpdgSelectorResult(validIPList, result, transactionId);
-        mHandler.dispatchMessage(
+        mHandler.sendMessage(
                 mHandler.obtainMessage(
                         EVENT_EPDG_ADDRESS_SELECTION_REQUEST_COMPLETE, epdgSelectorResult));
     }
