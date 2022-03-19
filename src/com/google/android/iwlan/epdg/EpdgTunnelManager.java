@@ -549,33 +549,13 @@ public class EpdgTunnelManager {
 
         @Override
         public void onOpened(ChildSessionConfiguration sessionConfiguration) {
-            TunnelConfig tunnelConfig = mApnNameToTunnelConfig.get(mApnName);
-
-            tunnelConfig.setDnsAddrList(sessionConfiguration.getInternalDnsServers());
-            tunnelConfig.setInternalAddrList(sessionConfiguration.getInternalAddresses());
-
-            IpSecManager.IpSecTunnelInterface tunnelInterface = tunnelConfig.getIface();
-
-            for (LinkAddress address : tunnelConfig.getInternalAddrList()) {
-                try {
-                    tunnelInterface.addAddress(address.getAddress(), address.getPrefixLength());
-                } catch (IOException e) {
-                    Log.e(TAG, "Adding internal addresses to interface failed.");
-                }
-            }
-
-            TunnelLinkProperties linkProperties =
-                    TunnelLinkProperties.builder()
-                            .setInternalAddresses(tunnelConfig.getInternalAddrList())
-                            .setDnsAddresses(tunnelConfig.getDnsAddrList())
-                            .setPcscfAddresses(tunnelConfig.getPcscfAddrList())
-                            .setIfaceName(tunnelConfig.getIface().getInterfaceName())
-                            .setSliceInfo(tunnelConfig.getSliceInfo())
-                            .build();
             mHandler.sendMessage(
                     mHandler.obtainMessage(
                             EVENT_CHILD_SESSION_OPENED,
-                            new TunnelOpenedData(mApnName, linkProperties)));
+                            new TunnelOpenedData(
+                                    mApnName,
+                                    sessionConfiguration.getInternalDnsServers(),
+                                    sessionConfiguration.getInternalAddresses())));
         }
 
         @Override
@@ -1354,11 +1334,33 @@ public class EpdgTunnelManager {
 
                 case EVENT_CHILD_SESSION_OPENED:
                     TunnelOpenedData tunnelOpenedData = (TunnelOpenedData) msg.obj;
-                    String apnName = tunnelOpenedData.getApnName();
+                    String apnName = tunnelOpenedData.mApnName;
                     TunnelConfig tunnelConfig = mApnNameToTunnelConfig.get(apnName);
-                    tunnelConfig
-                            .getTunnelCallback()
-                            .onOpened(apnName, tunnelOpenedData.getLinkProperties());
+
+                    tunnelConfig.setDnsAddrList(tunnelOpenedData.mInternalDnsServers);
+                    tunnelConfig.setInternalAddrList(tunnelOpenedData.mInternalAddresses);
+
+                    IpSecManager.IpSecTunnelInterface tunnelInterface = tunnelConfig.getIface();
+
+                    for (LinkAddress address : tunnelConfig.getInternalAddrList()) {
+                        try {
+                            tunnelInterface.addAddress(
+                                    address.getAddress(), address.getPrefixLength());
+                        } catch (IOException e) {
+                            Log.e(TAG, "Adding internal addresses to interface failed.");
+                        }
+                    }
+
+                    TunnelLinkProperties linkProperties =
+                            TunnelLinkProperties.builder()
+                                    .setInternalAddresses(tunnelConfig.getInternalAddrList())
+                                    .setDnsAddresses(tunnelConfig.getDnsAddrList())
+                                    .setPcscfAddresses(tunnelConfig.getPcscfAddrList())
+                                    .setIfaceName(tunnelConfig.getIface().getInterfaceName())
+                                    .setSliceInfo(tunnelConfig.getSliceInfo())
+                                    .build();
+                    tunnelConfig.getTunnelCallback().onOpened(apnName, linkProperties);
+
                     setIsEpdgAddressSelected(true);
                     mValidEpdgInfo.resetIndex();
                     mRequestQueue.poll();
@@ -1699,20 +1701,17 @@ public class EpdgTunnelManager {
     }
 
     private static final class TunnelOpenedData {
-        private final String mApnName;
-        private final TunnelLinkProperties mLinkProperties;
+        final String mApnName;
+        final List<InetAddress> mInternalDnsServers;
+        final List<LinkAddress> mInternalAddresses;
 
-        private TunnelOpenedData(String apnName, TunnelLinkProperties linkProperties) {
+        private TunnelOpenedData(
+                String apnName,
+                List<InetAddress> internalDnsServers,
+                List<LinkAddress> internalAddresses) {
             mApnName = apnName;
-            mLinkProperties = linkProperties;
-        }
-
-        public String getApnName() {
-            return mApnName;
-        }
-
-        public TunnelLinkProperties getLinkProperties() {
-            return mLinkProperties;
+            mInternalDnsServers = internalDnsServers;
+            mInternalAddresses = internalAddresses;
         }
     }
 
