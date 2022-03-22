@@ -155,7 +155,7 @@ public class IwlanEventListenerTest {
                 .thenReturn(true);
 
         // Trigger CROSS_SIM_CALLING_ENABLE_EVENT when cross sim calling setting is enabled
-        mIwlanEventListener.getCurrentUriSetting(CROSS_SIM_URI);
+        mIwlanEventListener.notifyCurrentSetting(CROSS_SIM_URI);
         verify(mMockMessage, times(1)).sendToTarget();
     }
 
@@ -176,7 +176,7 @@ public class IwlanEventListenerTest {
                 .thenReturn(false);
 
         // Trigger CROSS_SIM_CALLING_DISABLE_EVENT when cross sim calling setting is disabled
-        mIwlanEventListener.getCurrentUriSetting(CROSS_SIM_URI);
+        mIwlanEventListener.notifyCurrentSetting(CROSS_SIM_URI);
         verify(mMockMessage, times(1)).sendToTarget();
     }
 
@@ -228,10 +228,10 @@ public class IwlanEventListenerTest {
         mIwlanEventListener.addEventListener(events, mMockHandler);
         mIwlanEventListener.setWfcEnabledUri(WFC_ENABLED_URI);
 
-        mIwlanEventListener.getCurrentUriSetting(WFC_ENABLED_URI);
+        mIwlanEventListener.notifyCurrentSetting(WFC_ENABLED_URI);
         verify(mMockMessage, times(1)).sendToTarget();
 
-        mIwlanEventListener.getCurrentUriSetting(WFC_ENABLED_URI);
+        mIwlanEventListener.notifyCurrentSetting(WFC_ENABLED_URI);
         verify(mMockMessage_2, times(1)).sendToTarget();
     }
 
