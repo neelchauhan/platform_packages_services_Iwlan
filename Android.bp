@@ -73,6 +73,7 @@ android_test {
     static_libs: [
         "android-support-annotations",
         "androidx.test.rules",
+        "frameworks-base-testutils",
         "mockito-target-inline-minus-junit4",
         "mockito-target-extended-minus-junit4",
         "net-utils-dnspacket-common",
