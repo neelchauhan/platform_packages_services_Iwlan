@@ -17,6 +17,7 @@
 package com.google.android.iwlan;
 
 import android.net.ipsec.ike.exceptions.IkeException;
+import android.net.ipsec.ike.exceptions.IkeIOException;
 import android.net.ipsec.ike.exceptions.IkeInternalException;
 import android.net.ipsec.ike.exceptions.IkeProtocolException;
 import android.support.annotation.IntDef;
@@ -88,6 +89,8 @@ public class IwlanError {
         // resolve into specific types if possible
         if (exception instanceof IkeProtocolException) {
             IwlanErrorIkeProtocolException((IkeProtocolException) exception);
+        } else if (exception instanceof IkeIOException) {
+            IwlanErrorIkeIOException((IkeIOException) exception);
         } else if (exception instanceof IkeInternalException) {
             IwlanErrorIkeInternalException((IkeInternalException) exception);
         } else if (exception instanceof IkeException) {
@@ -110,6 +113,11 @@ public class IwlanError {
         } else {
             mErrorType = IKE_GENERIC_EXCEPTION;
         }
+        mException = exception;
+    }
+
+    private void IwlanErrorIkeIOException(@NonNull IkeIOException exception) {
+        mErrorType = IKE_INTERNAL_IO_EXCEPTION;
         mException = exception;
     }
 
