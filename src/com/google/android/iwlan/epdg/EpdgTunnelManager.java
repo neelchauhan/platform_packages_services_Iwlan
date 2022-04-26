@@ -460,15 +460,15 @@ public class EpdgTunnelManager {
         @Override
         public void onClosed() {
             Log.d(TAG, "Ike session closed for apn: " + mApnName);
-            mHandler.sendMessage(mHandler.obtainMessage(EVENT_IKE_SESSION_CLOSED, mApnName));
+            mHandler.sendMessage(
+                    mHandler.obtainMessage(
+                            EVENT_IKE_SESSION_CLOSED,
+                            new SessionClosedData(mApnName, new IwlanError(IwlanError.NO_ERROR))));
         }
 
         @Override
         public void onClosedExceptionally(IkeException exception) {
-            Log.d(TAG, "Ike session onClosedExceptionally for apn: " + mApnName);
-
             mNextReauthId = null;
-
             onSessionClosedWithException(exception, mApnName, EVENT_IKE_SESSION_CLOSED);
         }
 
@@ -561,18 +561,14 @@ public class EpdgTunnelManager {
         @Override
         public void onClosed() {
             Log.d(TAG, "onClosed child session for apn: " + mApnName);
-            TunnelConfig tunnelConfig = mApnNameToTunnelConfig.get(mApnName);
-            if (tunnelConfig == null) {
-                Log.d(TAG, "No tunnel callback for apn: " + mApnName);
-                return;
-            }
-            tunnelConfig = mApnNameToTunnelConfig.get(mApnName);
-            tunnelConfig.getIkeSession().close();
+            mHandler.sendMessage(
+                    mHandler.obtainMessage(
+                            EVENT_CHILD_SESSION_CLOSED,
+                            new SessionClosedData(mApnName, new IwlanError(IwlanError.NO_ERROR))));
         }
 
         @Override
         public void onClosedExceptionally(IkeException exception) {
-            Log.d(TAG, "onClosedExceptionally child session for apn: " + mApnName);
             onSessionClosedWithException(exception, mApnName, EVENT_CHILD_SESSION_CLOSED);
         }
 
@@ -1236,30 +1232,19 @@ public class EpdgTunnelManager {
 
     private void onSessionClosedWithException(
             IkeException exception, String apnName, int sessionType) {
-        Log.d(
+        IwlanError error = new IwlanError(exception);
+        Log.e(
                 TAG,
                 "Closing tunnel with exception for apn: "
                         + apnName
                         + " sessionType:"
                         + sessionType
                         + " error: "
-                        + new IwlanError(exception));
+                        + error);
         exception.printStackTrace();
 
-        TunnelConfig tunnelConfig = mApnNameToTunnelConfig.get(apnName);
-        if (tunnelConfig == null) {
-            Log.d(TAG, "No callback found for apn: " + apnName);
-            return;
-        }
-
-        tunnelConfig.setError(new IwlanError(exception));
-
-        if (sessionType == EVENT_CHILD_SESSION_CLOSED) {
-            tunnelConfig.getIkeSession().close();
-            return;
-        }
-
-        mHandler.sendMessage(mHandler.obtainMessage(sessionType, apnName));
+        mHandler.sendMessage(
+                mHandler.obtainMessage(sessionType, new SessionClosedData(apnName, error)));
     }
 
     private final class TmHandler extends Handler {
@@ -1268,6 +1253,9 @@ public class EpdgTunnelManager {
         @Override
         public void handleMessage(Message msg) {
             Log.d(TAG, "msg.what = " + msg.what);
+
+            String apnName;
+            TunnelConfig tunnelConfig;
 
             switch (msg.what) {
                 case EVENT_TUNNEL_BRINGUP_REQUEST:
@@ -1334,8 +1322,8 @@ public class EpdgTunnelManager {
 
                 case EVENT_CHILD_SESSION_OPENED:
                     TunnelOpenedData tunnelOpenedData = (TunnelOpenedData) msg.obj;
-                    String apnName = tunnelOpenedData.mApnName;
-                    TunnelConfig tunnelConfig = mApnNameToTunnelConfig.get(apnName);
+                    apnName = tunnelOpenedData.mApnName;
+                    tunnelConfig = mApnNameToTunnelConfig.get(apnName);
 
                     tunnelConfig.setDnsAddrList(tunnelOpenedData.mInternalDnsServers);
                     tunnelConfig.setInternalAddrList(tunnelOpenedData.mInternalAddresses);
@@ -1370,10 +1358,27 @@ public class EpdgTunnelManager {
 
                 case EVENT_IKE_SESSION_CLOSED:
                     printRequestQueue("EVENT_IKE_SESSION_CLOSED");
-                    apnName = (String) msg.obj;
+                    SessionClosedData sessionClosedData = (SessionClosedData) msg.obj;
+                    apnName = sessionClosedData.mApnName;
+
                     tunnelConfig = mApnNameToTunnelConfig.get(apnName);
-                    mApnNameToTunnelConfig.remove(apnName);
-                    IwlanError iwlanError = tunnelConfig.getError();
+                    if (tunnelConfig == null) {
+                        Log.e(TAG, "No callback found for apn: " + apnName);
+                        return;
+                    }
+
+                    // If IKE session closed exceptionally, we retrieve IwlanError directly from the
+                    // exception; otherwise, it is still possible that we triggered an IKE session
+                    // close due to an error (eg. IwlanError.TUNNEL_TRANSFORM_FAILED), or because
+                    // the Child session closed exceptionally; in which case, we attempt to retrieve
+                    // the stored error (if any) from TunnelConfig.
+                    IwlanError iwlanError;
+                    if (sessionClosedData.mIwlanError.getErrorType() != IwlanError.NO_ERROR) {
+                        iwlanError = sessionClosedData.mIwlanError;
+                    } else {
+                        iwlanError = tunnelConfig.getError();
+                    }
+
                     IpSecManager.IpSecTunnelInterface iface = tunnelConfig.getIface();
                     if (iface != null) {
                         iface.close();
@@ -1399,6 +1404,7 @@ public class EpdgTunnelManager {
                         tunnelConfig.getTunnelCallback().onClosed(apnName, iwlanError);
                     }
 
+                    mApnNameToTunnelConfig.remove(apnName);
                     if (mApnNameToTunnelConfig.size() == 0 && mRequestQueue.size() == 0) {
                         resetTunnelManagerState();
                     }
@@ -1423,6 +1429,7 @@ public class EpdgTunnelManager {
                         tunnelConfig.getIkeSession().setNetwork(network);
                     }
                     break;
+
                 case EVENT_TUNNEL_BRINGDOWN_REQUEST:
                     apnName = (String) msg.obj;
                     int forceClose = msg.arg1;
@@ -1501,9 +1508,18 @@ public class EpdgTunnelManager {
                     break;
 
                 case EVENT_CHILD_SESSION_CLOSED:
-                    // no-op - this should not be posted.
-                    // This is never posted since we save the error and close the IKE session
-                    // when child session closes.
+                    sessionClosedData = (SessionClosedData) msg.obj;
+                    apnName = sessionClosedData.mApnName;
+
+                    tunnelConfig = mApnNameToTunnelConfig.get(apnName);
+                    if (tunnelConfig == null) {
+                        Log.d(TAG, "No tunnel callback for apn: " + apnName);
+                        return;
+                    }
+                    tunnelConfig.setError(sessionClosedData.mIwlanError);
+                    tunnelConfig.getIkeSession().close();
+                    break;
+
                 default:
                     throw new IllegalStateException("Unexpected value: " + msg.what);
             }
@@ -1712,6 +1728,16 @@ public class EpdgTunnelManager {
             mApnName = apnName;
             mInternalDnsServers = internalDnsServers;
             mInternalAddresses = internalAddresses;
+        }
+    }
+
+    private static final class SessionClosedData {
+        final String mApnName;
+        final IwlanError mIwlanError;
+
+        private SessionClosedData(String apnName, IwlanError iwlanError) {
+            mApnName = apnName;
+            mIwlanError = iwlanError;
         }
     }
 
