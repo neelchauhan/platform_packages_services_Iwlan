@@ -1447,7 +1447,10 @@ public class EpdgTunnelManager {
                         } else {
                             tunnelConfig.getIkeSession().close();
                         }
-                        closePendingRequestsForApn(apnName);
+                    }
+                    int numClosed = closePendingRequestsForApn(apnName);
+                    if (numClosed > 0) {
+                        Log.d(TAG, "Closed " + numClosed + " pending requests for apn: " + apnName);
                     }
                     break;
 
@@ -1575,10 +1578,11 @@ public class EpdgTunnelManager {
     }
 
     @VisibleForTesting
-    void closePendingRequestsForApn(String apnName) {
+    int closePendingRequestsForApn(String apnName) {
+        int numRequestsClosed = 0;
         int queueSize = mRequestQueue.size();
         if (queueSize == 0) {
-            return;
+            return numRequestsClosed;
         }
 
         int count = 0;
@@ -1589,11 +1593,13 @@ public class EpdgTunnelManager {
                 requestWrapper
                         .getTunnelCallback()
                         .onClosed(apnName, new IwlanError(IwlanError.NO_ERROR));
+                numRequestsClosed++;
             } else {
                 mRequestQueue.add(requestWrapper);
             }
             count++;
         }
+        return numRequestsClosed;
     }
 
     @VisibleForTesting
