@@ -1417,7 +1417,7 @@ public class EpdgTunnelManager {
                     tunnelConfig = mApnNameToTunnelConfig.get(apnName);
 
                     // Update the global cache if they aren't equal
-                    if (!mNetwork.equals(network)) {
+                    if (mNetwork == null || !mNetwork.equals(network)) {
                         Log.d(TAG, "Updating mNetwork to " + network);
                         mNetwork = network;
                     }
