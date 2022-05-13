@@ -872,14 +872,46 @@ public class IwlanDataService extends DataService {
                                 + ", transport: "
                                 + sDefaultDataTransport);
 
-                if (networkConnected == false
-                        || mTunnelStateForApn.get(dataProfile.getApn()) != null) {
+                if (networkConnected == false) {
                     deliverCallback(
                             CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
                             5 /* DataServiceCallback.RESULT_ERROR_TEMPORARILY_UNAVAILABLE */,
                             callback,
                             null);
                     return;
+                }
+
+                TunnelState tunnelState = mTunnelStateForApn.get(dataProfile.getApn());
+
+                // Return the existing PDN if the pduSessionId is the same and the tunnel state is
+                // TUNNEL_UP.
+                if (tunnelState != null) {
+                    if (tunnelState.getPduSessionId() == pduSessionId
+                            && tunnelState.getState() == TunnelState.TUNNEL_UP) {
+                        Log.w(
+                                SUB_TAG,
+                                "The tunnel for " + dataProfile.getApn() + " already exists.");
+                        deliverCallback(
+                                CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
+                                DataServiceCallback.RESULT_SUCCESS,
+                                callback,
+                                apnTunnelStateToDataCallResponse(dataProfile.getApn()));
+                        return;
+                    } else {
+                        Log.e(
+                                SUB_TAG,
+                                "Force close the existing PDN. pduSessionId = "
+                                        + tunnelState.getPduSessionId()
+                                        + " Tunnel State = "
+                                        + tunnelState.getState());
+                        getTunnelManager().closeTunnel(dataProfile.getApn(), true /* forceClose */);
+                        deliverCallback(
+                                CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
+                                5 /* DataServiceCallback.RESULT_ERROR_TEMPORARILY_UNAVAILABLE */,
+                                callback,
+                                null);
+                        return;
+                    }
                 }
 
                 TunnelSetupRequest.Builder tunnelReqBuilder =
