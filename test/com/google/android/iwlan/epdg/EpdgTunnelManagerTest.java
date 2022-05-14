@@ -36,6 +36,7 @@ import android.net.ipsec.ike.ChildSessionParams;
 import android.net.ipsec.ike.IkeFqdnIdentification;
 import android.net.ipsec.ike.IkeSession;
 import android.net.ipsec.ike.IkeSessionCallback;
+import android.net.ipsec.ike.IkeSessionConfiguration;
 import android.net.ipsec.ike.IkeSessionParams;
 import android.net.ipsec.ike.SaProposal;
 import android.net.ipsec.ike.TunnelModeChildSessionParams;
@@ -103,6 +104,7 @@ public class EpdgTunnelManagerTest {
     @Mock TelephonyManager mMockTelephonyManager;
     @Mock EpdgTunnelManager.IkeSessionCreator mMockIkeSessionCreator;
     @Mock IkeException mMockIkeException;
+    @Mock IkeSessionConfiguration mMockIkeSessionConfiguration;
 
     @Before
     public void setUp() throws Exception {
@@ -925,6 +927,32 @@ public class EpdgTunnelManagerTest {
         verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(testApnName), any(IwlanError.class));
         verify(mEpdgTunnelManager, times(2)).resetTunnelManagerState();
         verify(mEpdgTunnelManager, times(1)).reportIwlanError(eq(testApnName), eq(error));
+    }
+
+    @Test
+    public void testIkeSessionOnOpenedUpdatesPcscfAddrInTunnelConfig() throws Exception {
+        String testApnName = "ims";
+        IwlanError error = new IwlanError(IwlanError.NO_ERROR);
+
+        doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(testApnName), eq(error));
+        mEpdgTunnelManager.putApnNameToTunnelConfig(
+                testApnName, mMockIkeSession, mMockIwlanTunnelCallback, null, 0);
+
+        List<InetAddress> ipList = new ArrayList<>();
+        ipList.add(InetAddress.getByName(TEST_IP_ADDRESS));
+        when(mMockIkeSessionConfiguration.getPcscfServers()).thenReturn(ipList);
+
+        PersistableBundle bundle = new PersistableBundle();
+        setupMockForGetConfig(bundle);
+
+        mEpdgTunnelManager
+                .getTmIkeSessionCallback(testApnName)
+                .onOpened(mMockIkeSessionConfiguration);
+        mTestLooper.dispatchAll();
+
+        EpdgTunnelManager.TunnelConfig testApnTunnelConfig =
+                mEpdgTunnelManager.getTunnelConfigForApn(testApnName);
+        assertEquals(testApnTunnelConfig.getPcscfAddrList(), ipList);
     }
 
     @Test
