@@ -872,7 +872,8 @@ public class EpdgTunnelManager {
     // Returns the IMEISV or device IMEI, in that order of priority.
     private @Nullable String getMobileDeviceIdentity() {
         TelephonyManager telephonyManager = mContext.getSystemService(TelephonyManager.class);
-        telephonyManager = telephonyManager.createForSubscriptionId(mSlotId);
+        telephonyManager =
+                telephonyManager.createForSubscriptionId(IwlanHelper.getSubId(mContext, mSlotId));
         if (telephonyManager == null) {
             return null;
         }
