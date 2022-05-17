@@ -62,6 +62,7 @@ import android.os.Message;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.telephony.CarrierConfigManager;
+import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
 import android.telephony.data.NetworkSliceInfo;
@@ -72,6 +73,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.google.android.iwlan.ErrorPolicyManager;
 import com.google.android.iwlan.IwlanError;
 import com.google.android.iwlan.IwlanHelper;
+import com.google.android.iwlan.exceptions.IwlanSimNotReadyException;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
@@ -715,6 +717,7 @@ public class EpdgTunnelManager {
 
     private void onBringUpTunnel(TunnelSetupRequest setupRequest, TunnelCallback tunnelCallback) {
         String apnName = setupRequest.apnName();
+        IkeSessionParams ikeSessionParams = null;
 
         Log.d(
                 TAG,
@@ -723,11 +726,21 @@ public class EpdgTunnelManager {
                         + "ePDG : "
                         + mEpdgAddress.getHostAddress());
 
+        try {
+            ikeSessionParams = buildIkeSessionParams(setupRequest, apnName);
+        } catch (IwlanSimNotReadyException e) {
+            mRequestQueue.poll();
+            IwlanError iwlanError = new IwlanError(IwlanError.SIM_NOT_READY_EXCEPTION);
+            reportIwlanError(apnName, iwlanError);
+            tunnelCallback.onClosed(apnName, iwlanError);
+            return;
+        }
+
         IkeSession ikeSession =
                 getIkeSessionCreator()
                         .createIkeSession(
                                 mContext,
-                                buildIkeSessionParams(setupRequest, apnName),
+                                ikeSessionParams,
                                 buildChildSessionParams(setupRequest),
                                 Executors.newSingleThreadExecutor(),
                                 getTmIkeSessionCallback(apnName),
@@ -892,8 +905,8 @@ public class EpdgTunnelManager {
         return imei.substring(0, imei.length() - 1) + imeisv_suffix;
     }
 
-    private IkeSessionParams buildIkeSessionParams(
-            TunnelSetupRequest setupRequest, String apnName) {
+    private IkeSessionParams buildIkeSessionParams(TunnelSetupRequest setupRequest, String apnName)
+            throws IwlanSimNotReadyException {
         int hardTimeSeconds =
                 (int) getConfig(CarrierConfigManager.Iwlan.KEY_IKE_REKEY_HARD_TIMER_SEC_INT);
         int softTimeSeconds =
@@ -1165,13 +1178,13 @@ public class EpdgTunnelManager {
         return saProposalBuilder.build();
     }
 
-    private IkeIdentification getLocalIdentification() {
+    private IkeIdentification getLocalIdentification() throws IwlanSimNotReadyException {
         String nai;
 
         nai = IwlanHelper.getNai(mContext, mSlotId, mNextReauthId);
 
         if (nai == null) {
-            throw new IllegalArgumentException("Nai is null.");
+            throw new IwlanSimNotReadyException("Nai is null.");
         }
 
         Log.d(TAG, "getLocalIdentification: Nai: " + nai);
@@ -1196,12 +1209,12 @@ public class EpdgTunnelManager {
         }
     }
 
-    private EapSessionConfig getEapConfig() {
+    private EapSessionConfig getEapConfig() throws IwlanSimNotReadyException {
         int subId = IwlanHelper.getSubId(mContext, mSlotId);
         String nai = IwlanHelper.getNai(mContext, mSlotId, null);
 
         if (nai == null) {
-            throw new IllegalArgumentException("Nai is null.");
+            throw new IwlanSimNotReadyException("Nai is null.");
         }
 
         EapSessionConfig.EapAkaOption option = null;
@@ -1247,6 +1260,18 @@ public class EpdgTunnelManager {
                 case EVENT_TUNNEL_BRINGUP_REQUEST:
                     TunnelRequestWrapper tunnelRequestWrapper = (TunnelRequestWrapper) msg.obj;
                     TunnelSetupRequest setupRequest = tunnelRequestWrapper.getSetupRequest();
+
+                    if (IwlanHelper.getSubId(mContext, mSlotId)
+                            == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                        Log.e(TAG, "SIM isn't ready");
+                        IwlanError iwlanError = new IwlanError(IwlanError.SIM_NOT_READY_EXCEPTION);
+                        reportIwlanError(setupRequest.apnName(), iwlanError);
+                        tunnelRequestWrapper
+                                .getTunnelCallback()
+                                .onClosed(setupRequest.apnName(), iwlanError);
+                        return;
+                    }
+
                     if (!canBringUpTunnel(setupRequest.apnName())) {
                         Log.d(TAG, "Cannot bring up tunnel as retry time has not passed");
                         tunnelRequestWrapper
