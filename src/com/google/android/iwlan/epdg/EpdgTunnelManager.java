@@ -387,6 +387,12 @@ public class EpdgTunnelManager {
             return sb.toString();
         }
 
+        public boolean hasTunnelOpened() {
+            return mInternalAddrList != null
+                    && !mInternalAddrList.isEmpty() /* The child session is opened */
+                    && mIface != null; /* The tunnel interface is bring up */
+        }
+
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();
@@ -1387,7 +1393,13 @@ public class EpdgTunnelManager {
                     if (sessionClosedData.mIwlanError.getErrorType() != IwlanError.NO_ERROR) {
                         iwlanError = sessionClosedData.mIwlanError;
                     } else {
-                        iwlanError = tunnelConfig.getError();
+                        // If IKE session setup failed without error cause, Iwlan reports
+                        // NETWORK_FAILURE instead of NO_ERROR
+                        if (!tunnelConfig.hasTunnelOpened()) {
+                            iwlanError = new IwlanError(IwlanError.NETWORK_FAILURE);
+                        } else {
+                            iwlanError = tunnelConfig.getError();
+                        }
                     }
 
                     IpSecManager.IpSecTunnelInterface iface = tunnelConfig.getIface();
