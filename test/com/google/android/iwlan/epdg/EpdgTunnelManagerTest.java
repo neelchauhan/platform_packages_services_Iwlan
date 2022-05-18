@@ -72,6 +72,7 @@ import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Executor;
 
@@ -80,8 +81,16 @@ public class EpdgTunnelManagerTest {
     public static final int DEFAULT_SLOT_INDEX = 0;
     public static final int DEFAULT_SUBID = 0;
 
-    private final String TEST_IP_ADDRESS = "127.0.0.1";
-    private final String TEST_APN_NAME = "www.xyz.com";
+    private static final String TEST_IP_ADDRESS = "127.0.0.1";
+    private static final String TEST_APN_NAME = "www.xyz.com";
+
+    private static final ArrayList<InetAddress> EXPECTED_EPDG_ADDRESSES =
+            new ArrayList<>(
+                    Arrays.asList(
+                            new InetAddress[] {
+                                InetAddresses.parseNumericAddress(TEST_IP_ADDRESS)
+                            }));
+
     private EpdgTunnelManager mEpdgTunnelManager;
 
     private class IwlanTunnelCallback implements EpdgTunnelManager.TunnelCallback {
@@ -124,6 +133,10 @@ public class EpdgTunnelManagerTest {
                         eq(mMockNetwork),
                         any(EpdgSelector.EpdgSelectorCallback.class)))
                 .thenReturn(new IwlanError(IwlanError.NO_ERROR));
+
+        // initialize carrier configuration
+        PersistableBundle bundle = new PersistableBundle();
+        setupMockForGetConfig(bundle);
 
         // Fake local address
         List<InetAddress> testLocalAddressList = new ArrayList<InetAddress>();
@@ -229,6 +242,9 @@ public class EpdgTunnelManagerTest {
         TunnelSetupRequest TSR = getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP);
         doReturn(true).when(mEpdgTunnelManager).canBringUpTunnel(eq(TEST_APN_NAME));
 
+        PersistableBundle bundle = new PersistableBundle();
+        setupMockForGetConfig(bundle);
+
         boolean ret = mEpdgTunnelManager.bringUpTunnel(TSR, mMockIwlanTunnelCallback);
         assertTrue(ret);
         mTestLooper.dispatchAll();
@@ -241,6 +257,160 @@ public class EpdgTunnelManagerTest {
                         eq(false),
                         eq(mMockNetwork),
                         any());
+    }
+
+    private void setupTunnelBringup() throws Exception {
+        setupMockForGetConfig(null);
+        doReturn(null)
+                .when(mMockIkeSessionCreator)
+                .createIkeSession(
+                        eq(mMockContext),
+                        any(IkeSessionParams.class),
+                        any(ChildSessionParams.class),
+                        any(Executor.class),
+                        any(IkeSessionCallback.class),
+                        any(ChildSessionCallback.class));
+
+        doReturn(true).when(mEpdgTunnelManager).canBringUpTunnel(eq(TEST_APN_NAME));
+
+        boolean ret =
+                mEpdgTunnelManager.bringUpTunnel(
+                        getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
+                        mMockIwlanTunnelCallback);
+        assertTrue(ret);
+        mTestLooper.dispatchAll();
+
+        ArrayList<InetAddress> ipList = new ArrayList<>();
+        ipList.add(InetAddress.getByName(TEST_IP_ADDRESS));
+        mEpdgTunnelManager.sendSelectionRequestComplete(
+                ipList, new IwlanError(IwlanError.NO_ERROR), 1);
+        mTestLooper.dispatchAll();
+    }
+
+    @Test
+    public void testBringUpTunnelSetsDeviceIdentityImeiSv() throws Exception {
+        when(mMockContext.getSystemService(eq(TelephonyManager.class)))
+                .thenReturn(mMockTelephonyManager);
+        when(mMockTelephonyManager.createForSubscriptionId(DEFAULT_SUBID))
+                .thenReturn(mMockTelephonyManager);
+
+        String TEST_IMEI = "012345678901234";
+        String TEST_IMEI_SUFFIX = "56";
+        String EXPECTED_IMEISV = TEST_IMEI.substring(0, TEST_IMEI.length() - 1) + TEST_IMEI_SUFFIX;
+        when(mMockTelephonyManager.getImei()).thenReturn(TEST_IMEI);
+        when(mMockTelephonyManager.getDeviceSoftwareVersion()).thenReturn(TEST_IMEI_SUFFIX);
+
+        setupTunnelBringup();
+
+        ArgumentCaptor<IkeSessionParams> ikeSessionParamsCaptor =
+                ArgumentCaptor.forClass(IkeSessionParams.class);
+        verify(mMockIkeSessionCreator, atLeastOnce())
+                .createIkeSession(
+                        eq(mMockContext),
+                        ikeSessionParamsCaptor.capture(),
+                        any(ChildSessionParams.class),
+                        any(Executor.class),
+                        any(IkeSessionCallback.class),
+                        any(ChildSessionCallback.class));
+        IkeSessionParams ikeSessionParams = ikeSessionParamsCaptor.getValue();
+        assertEquals(
+                ikeSessionParams.getIke3gppExtension().getIke3gppParams().getMobileDeviceIdentity(),
+                EXPECTED_IMEISV);
+    }
+
+    @Test
+    public void testBringUpTunnelSetsDeviceIdentityImei() throws Exception {
+        when(mMockContext.getSystemService(eq(TelephonyManager.class)))
+                .thenReturn(mMockTelephonyManager);
+        when(mMockTelephonyManager.createForSubscriptionId(DEFAULT_SUBID))
+                .thenReturn(mMockTelephonyManager);
+
+        String TEST_IMEI = "012345678901234";
+        when(mMockTelephonyManager.getImei()).thenReturn(TEST_IMEI);
+        when(mMockTelephonyManager.getDeviceSoftwareVersion()).thenReturn(null);
+
+        setupTunnelBringup();
+
+        ArgumentCaptor<IkeSessionParams> ikeSessionParamsCaptor =
+                ArgumentCaptor.forClass(IkeSessionParams.class);
+        verify(mMockIkeSessionCreator, atLeastOnce())
+                .createIkeSession(
+                        eq(mMockContext),
+                        ikeSessionParamsCaptor.capture(),
+                        any(ChildSessionParams.class),
+                        any(Executor.class),
+                        any(IkeSessionCallback.class),
+                        any(ChildSessionCallback.class));
+        IkeSessionParams ikeSessionParams = ikeSessionParamsCaptor.getValue();
+        assertEquals(
+                ikeSessionParams.getIke3gppExtension().getIke3gppParams().getMobileDeviceIdentity(),
+                TEST_IMEI);
+    }
+
+    @Test
+    public void testBringUpTunnelNoDeviceIdentityWhenImeiUnavailable() throws Exception {
+        when(mMockContext.getSystemService(eq(TelephonyManager.class)))
+                .thenReturn(mMockTelephonyManager);
+        when(mMockTelephonyManager.createForSubscriptionId(DEFAULT_SUBID))
+                .thenReturn(mMockTelephonyManager);
+        when(mMockTelephonyManager.getImei()).thenReturn(null);
+
+        setupTunnelBringup();
+
+        ArgumentCaptor<IkeSessionParams> ikeSessionParamsCaptor =
+                ArgumentCaptor.forClass(IkeSessionParams.class);
+        verify(mMockIkeSessionCreator, atLeastOnce())
+                .createIkeSession(
+                        eq(mMockContext),
+                        ikeSessionParamsCaptor.capture(),
+                        any(ChildSessionParams.class),
+                        any(Executor.class),
+                        any(IkeSessionCallback.class),
+                        any(ChildSessionCallback.class));
+        IkeSessionParams ikeSessionParams = ikeSessionParamsCaptor.getValue();
+        assertEquals(
+                ikeSessionParams.getIke3gppExtension().getIke3gppParams().getMobileDeviceIdentity(),
+                null);
+    }
+
+    @Test
+    public void testBringUpTunnelWithMobilityOptions() throws Exception {
+        doReturn(null)
+                .when(mMockIkeSessionCreator)
+                .createIkeSession(
+                        eq(mMockContext),
+                        any(IkeSessionParams.class),
+                        any(ChildSessionParams.class),
+                        any(Executor.class),
+                        any(IkeSessionCallback.class),
+                        any(ChildSessionCallback.class));
+
+        doReturn(true).when(mEpdgTunnelManager).canBringUpTunnel(eq(TEST_APN_NAME));
+
+        boolean ret =
+                mEpdgTunnelManager.bringUpTunnel(
+                        getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
+                        mMockIwlanTunnelCallback);
+        assertTrue(ret);
+        mTestLooper.dispatchAll();
+
+        mEpdgTunnelManager.sendSelectionRequestComplete(
+                EXPECTED_EPDG_ADDRESSES, new IwlanError(IwlanError.NO_ERROR), 1);
+        mTestLooper.dispatchAll();
+
+        ArgumentCaptor<IkeSessionParams> ikeSessionParamsCaptor =
+                ArgumentCaptor.forClass(IkeSessionParams.class);
+        verify(mMockIkeSessionCreator, atLeastOnce())
+                .createIkeSession(
+                        eq(mMockContext),
+                        ikeSessionParamsCaptor.capture(),
+                        any(ChildSessionParams.class),
+                        any(Executor.class),
+                        any(IkeSessionCallback.class),
+                        any(ChildSessionCallback.class));
+        IkeSessionParams ikeSessionParams = ikeSessionParamsCaptor.getValue();
+        assertTrue(ikeSessionParams.hasIkeOption(IkeSessionParams.IKE_OPTION_MOBIKE));
+        assertTrue(ikeSessionParams.hasIkeOption(IkeSessionParams.IKE_OPTION_REKEY_MOBILITY));
     }
 
     @Test
@@ -1447,5 +1617,66 @@ public class EpdgTunnelManagerTest {
         }
         assertTrue(ipv6ConfigRequestPresent);
         assertTrue(ipv4ConfigRequestPresent);
+    }
+
+    @Test
+    public void testBringupTunnelFailWithInvalidSimState() throws Exception {
+        String testApnName = "www.xyz.com";
+        IwlanError error = new IwlanError(IwlanError.SIM_NOT_READY_EXCEPTION);
+
+        doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(testApnName), eq(error));
+        doReturn(true).when(mEpdgTunnelManager).canBringUpTunnel(eq(testApnName));
+
+        PersistableBundle bundle = new PersistableBundle();
+        setupMockForGetConfig(bundle);
+
+        when(mMockSubscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(DEFAULT_SLOT_INDEX))
+                .thenReturn(null);
+
+        boolean ret =
+                mEpdgTunnelManager.bringUpTunnel(
+                        getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
+                        mMockIwlanTunnelCallback);
+        assertTrue(ret);
+        mTestLooper.dispatchAll();
+
+        ArrayList<InetAddress> ipList = new ArrayList<>();
+        ipList.add(InetAddress.getByName(TEST_IP_ADDRESS));
+        mEpdgTunnelManager.sendSelectionRequestComplete(
+                ipList, new IwlanError(IwlanError.NO_ERROR), 1);
+        mTestLooper.dispatchAll();
+
+        verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(testApnName), eq(error));
+    }
+
+    @Test
+    public void testBringupTunnelFailWithInvalidNai() throws Exception {
+        String testApnName = "www.xyz.com";
+        IwlanError error = new IwlanError(IwlanError.SIM_NOT_READY_EXCEPTION);
+
+        doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(testApnName), eq(error));
+        doReturn(true).when(mEpdgTunnelManager).canBringUpTunnel(eq(testApnName));
+
+        PersistableBundle bundle = new PersistableBundle();
+        setupMockForGetConfig(bundle);
+
+        when(mMockSubscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(DEFAULT_SLOT_INDEX))
+                .thenReturn(mMockSubscriptionInfo)
+                .thenReturn(null);
+
+        boolean ret =
+                mEpdgTunnelManager.bringUpTunnel(
+                        getBasicTunnelSetupRequest(TEST_APN_NAME, ApnSetting.PROTOCOL_IP),
+                        mMockIwlanTunnelCallback);
+        assertTrue(ret);
+        mTestLooper.dispatchAll();
+
+        ArrayList<InetAddress> ipList = new ArrayList<>();
+        ipList.add(InetAddress.getByName(TEST_IP_ADDRESS));
+        mEpdgTunnelManager.sendSelectionRequestComplete(
+                ipList, new IwlanError(IwlanError.NO_ERROR), 1);
+        mTestLooper.dispatchAll();
+
+        verify(mMockIwlanTunnelCallback, times(1)).onClosed(eq(testApnName), eq(error));
     }
 }

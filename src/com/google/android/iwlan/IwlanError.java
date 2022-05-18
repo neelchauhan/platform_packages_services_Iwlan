@@ -40,9 +40,10 @@ public class IwlanError {
     // Known internal types
     public static final int EPDG_SELECTOR_SERVER_SELECTION_FAILED = 4;
     public static final int TUNNEL_TRANSFORM_FAILED = 5;
+    public static final int SIM_NOT_READY_EXCEPTION = 6;
 
     // Catch all exception
-    public static final int UNKNOWN_EXCEPTION = 6; // catch all
+    public static final int UNKNOWN_EXCEPTION = 7; // catch all
 
     @IntDef({
         NO_ERROR,
@@ -51,6 +52,7 @@ public class IwlanError {
         IKE_GENERIC_EXCEPTION,
         EPDG_SELECTOR_SERVER_SELECTION_FAILED,
         TUNNEL_TRANSFORM_FAILED,
+        SIM_NOT_READY_EXCEPTION,
         UNKNOWN_EXCEPTION
     })
     @interface IwlanErrorType {};
@@ -66,6 +68,7 @@ public class IwlanError {
                             EPDG_SELECTOR_SERVER_SELECTION_FAILED,
                             "IWLAN_EPDG_SELECTOR_SERVER_SELECTION_FAILED");
                     put(TUNNEL_TRANSFORM_FAILED, "IWLAN_TUNNEL_TRANSFORM_FAILED");
+                    put(SIM_NOT_READY_EXCEPTION, "IWLAN_SIM_NOT_READY_EXCEPTION");
                     put(UNKNOWN_EXCEPTION, "IWLAN_UNKNOWN_EXCEPTION");
                 }
             };
@@ -191,6 +194,9 @@ public class IwlanError {
                 break;
             case "TUNNEL_TRANSFORM_FAILED":
                 ret = IwlanError.TUNNEL_TRANSFORM_FAILED;
+                break;
+            case "SIM_NOT_READY_EXCEPTION":
+                ret = IwlanError.SIM_NOT_READY_EXCEPTION;
                 break;
         }
         return ret;
