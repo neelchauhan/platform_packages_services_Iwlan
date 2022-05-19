@@ -991,7 +991,7 @@ public class EpdgTunnelManagerTest {
     @Test
     public void testHandleOnClosedWithEpdgAddressSelected_True() throws Exception {
         String testApnName = "www.xyz.com";
-        IwlanError error = new IwlanError(IwlanError.NO_ERROR);
+        IwlanError error = new IwlanError(IwlanError.NETWORK_FAILURE);
 
         doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(testApnName), eq(error));
         mEpdgTunnelManager.putApnNameToTunnelConfig(
@@ -1010,7 +1010,7 @@ public class EpdgTunnelManagerTest {
     @Test
     public void testHandleOnClosedWithEpdgAddressSelected_False() throws Exception {
         String testApnName = "www.xyz.com";
-        IwlanError error = new IwlanError(IwlanError.NO_ERROR);
+        IwlanError error = new IwlanError(IwlanError.NETWORK_FAILURE);
 
         doReturn(0L).when(mEpdgTunnelManager).reportIwlanError(eq(testApnName), eq(error));
 
