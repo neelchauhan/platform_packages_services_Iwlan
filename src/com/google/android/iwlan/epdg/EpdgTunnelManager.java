@@ -531,11 +531,12 @@ public class EpdgTunnelManager {
         }
     }
 
-    private class TmChildSessionCallBack implements ChildSessionCallback {
+    @VisibleForTesting
+    class TmChildSessionCallback implements ChildSessionCallback {
 
         private final String mApnName;
 
-        TmChildSessionCallBack(String apnName) {
+        TmChildSessionCallback(String apnName) {
             this.mApnName = apnName;
         }
 
@@ -750,7 +751,7 @@ public class EpdgTunnelManager {
                                 buildChildSessionParams(setupRequest),
                                 Executors.newSingleThreadExecutor(),
                                 getTmIkeSessionCallback(apnName),
-                                new TmChildSessionCallBack(apnName));
+                                new TmChildSessionCallback(apnName));
 
         boolean isSrcIpv6Present = setupRequest.srcIpv6Address().isPresent();
         putApnNameToTunnelConfig(
@@ -1521,8 +1522,10 @@ public class EpdgTunnelManager {
                                 tunnelConfig.getIface(),
                                 transformData.getDirection(),
                                 transformData.getTransform());
-                    } catch (IOException e) {
-                        Log.e(TAG, "Failed to apply tunnel transform.");
+                    } catch (IOException | IllegalArgumentException e) {
+                        // If the IKE session was closed before the transform could be applied, the
+                        // IpSecService will throw an IAE on processing the IpSecTunnelInterface id.
+                        Log.e(TAG, "Failed to apply tunnel transform." + e);
                         closeIkeSession(
                                 apnName, new IwlanError(IwlanError.TUNNEL_TRANSFORM_FAILED));
                     }
