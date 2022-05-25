@@ -22,6 +22,7 @@ import static android.system.OsConstants.AF_INET;
 import static android.system.OsConstants.AF_INET6;
 
 import android.content.Context;
+import android.net.ConnectivityManager;
 import android.net.InetAddresses;
 import android.net.IpPrefix;
 import android.net.IpSecManager;
@@ -113,6 +114,7 @@ public class EpdgTunnelManager {
     private static final int EVENT_IPSEC_TRANSFORM_DELETED = 8;
     private static final int EVENT_UPDATE_NETWORK = 9;
     private static final int EVENT_IKE_SESSION_OPENED = 10;
+    private static final int EVENT_IKE_SESSION_CONNECTION_INFO_CHANGED = 11;
     private static final int IKE_HARD_LIFETIME_SEC_MINIMUM = 300;
     private static final int IKE_HARD_LIFETIME_SEC_MAXIMUM = 86400;
     private static final int IKE_SOFT_LIFETIME_SEC_MINIMUM = 120;
@@ -481,14 +483,17 @@ public class EpdgTunnelManager {
         @Override
         public void onIkeSessionConnectionInfoChanged(
                 IkeSessionConnectionInfo ikeSessionConnectionInfo) {
-            Log.d(TAG, "Ike session connection info changed for apn: " + mApnName);
-            TunnelConfig tunnelConfig = mApnNameToTunnelConfig.get(mApnName);
-            IpSecManager.IpSecTunnelInterface tunnelInterface = tunnelConfig.getIface();
-            try {
-                tunnelInterface.setUnderlyingNetwork(ikeSessionConnectionInfo.getNetwork());
-            } catch (IOException e) {
-                Log.e(TAG, "IOException while updating underlying network for apn: " + mApnName);
-            }
+            Network network = ikeSessionConnectionInfo.getNetwork();
+            Log.d(
+                    TAG,
+                    "Ike session connection info changed for apn: "
+                            + mApnName
+                            + " Network: "
+                            + network);
+            mHandler.sendMessage(
+                    mHandler.obtainMessage(
+                            EVENT_IKE_SESSION_CONNECTION_INFO_CHANGED,
+                            new IkeSessionConnectionInfoData(mApnName, ikeSessionConnectionInfo)));
         }
     }
 
@@ -1577,6 +1582,34 @@ public class EpdgTunnelManager {
                         }
                     }
                     break;
+
+                case EVENT_IKE_SESSION_CONNECTION_INFO_CHANGED:
+                    IkeSessionConnectionInfoData ikeSessionConnectionInfoData =
+                            (IkeSessionConnectionInfoData) msg.obj;
+                    network = ikeSessionConnectionInfoData.mIkeSessionConnectionInfo.getNetwork();
+                    apnName = ikeSessionConnectionInfoData.mApnName;
+
+                    ConnectivityManager connectivityManager =
+                            mContext.getSystemService(ConnectivityManager.class);
+                    if (connectivityManager.getLinkProperties(network) == null) {
+                        Log.e(TAG, "Network " + network + " has null LinkProperties!");
+                        return;
+                    }
+
+                    tunnelConfig = mApnNameToTunnelConfig.get(apnName);
+                    tunnelInterface = tunnelConfig.getIface();
+                    try {
+                        tunnelInterface.setUnderlyingNetwork(network);
+                    } catch (IOException | IllegalArgumentException e) {
+                        Log.e(
+                                TAG,
+                                "Failed to update underlying network for apn: "
+                                        + apnName
+                                        + " exception: "
+                                        + e);
+                    }
+                    break;
+
                 default:
                     throw new IllegalStateException("Unexpected value: " + msg.what);
             }
@@ -1801,6 +1834,17 @@ public class EpdgTunnelManager {
                 String apnName, IkeSessionConfiguration ikeSessionConfiguration) {
             mApnName = apnName;
             mIkeSessionConfiguration = ikeSessionConfiguration;
+        }
+    }
+
+    private static final class IkeSessionConnectionInfoData {
+        final String mApnName;
+        final IkeSessionConnectionInfo mIkeSessionConnectionInfo;
+
+        private IkeSessionConnectionInfoData(
+                String apnName, IkeSessionConnectionInfo ikeSessionConnectionInfo) {
+            mApnName = apnName;
+            mIkeSessionConnectionInfo = ikeSessionConnectionInfo;
         }
     }
 

@@ -28,10 +28,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.content.Context;
+import android.net.ConnectivityManager;
 import android.net.InetAddresses;
 import android.net.IpSecManager;
 import android.net.IpSecTransform;
 import android.net.LinkAddress;
+import android.net.LinkProperties;
 import android.net.Network;
 import android.net.ipsec.ike.ChildSessionCallback;
 import android.net.ipsec.ike.ChildSessionConfiguration;
@@ -40,6 +42,7 @@ import android.net.ipsec.ike.IkeFqdnIdentification;
 import android.net.ipsec.ike.IkeSession;
 import android.net.ipsec.ike.IkeSessionCallback;
 import android.net.ipsec.ike.IkeSessionConfiguration;
+import android.net.ipsec.ike.IkeSessionConnectionInfo;
 import android.net.ipsec.ike.IkeSessionParams;
 import android.net.ipsec.ike.SaProposal;
 import android.net.ipsec.ike.TunnelModeChildSessionParams;
@@ -132,6 +135,7 @@ public class EpdgTunnelManagerTest {
     @Mock private EpdgSelector mMockEpdgSelector;
     @Mock private Network mMockNetwork;
     @Mock CarrierConfigManager mMockCarrierConfigManager;
+    @Mock ConnectivityManager mMockConnectivityManager;
     @Mock SubscriptionManager mMockSubscriptionManager;
     @Mock SubscriptionInfo mMockSubscriptionInfo;
     @Mock TelephonyManager mMockTelephonyManager;
@@ -141,8 +145,10 @@ public class EpdgTunnelManagerTest {
     @Mock IkeSessionConfiguration mMockIkeSessionConfiguration;
     @Mock ChildSessionConfiguration mMockChildSessionConfiguration;
     @Mock IpSecManager.IpSecTunnelInterface mMockIpSecTunnelInterface;
+    @Mock IkeSessionConnectionInfo mMockIkeSessionConnectionInfo;
     @Mock IpSecTransform mMockedIpSecTransformIn;
     @Mock IpSecTransform mMockedIpSecTransformOut;
+    @Mock LinkProperties mMockLinkProperties;
 
     ArgumentCaptor<ChildSessionCallback> mChildSessionCallbackCaptor;
 
@@ -183,6 +189,8 @@ public class EpdgTunnelManagerTest {
                 .thenReturn(mMockIpSecTunnelInterface);
 
         when(mMockIpSecTunnelInterface.getInterfaceName()).thenReturn("wlan0");
+
+        when(mMockIkeSessionConnectionInfo.getNetwork()).thenReturn(mMockNetwork);
 
         mChildSessionCallbackCaptor = ArgumentCaptor.forClass(ChildSessionCallback.class);
 
@@ -1008,6 +1016,8 @@ public class EpdgTunnelManagerTest {
                 });
         when(mMockContext.getSystemService(eq(CarrierConfigManager.class)))
                 .thenReturn(mMockCarrierConfigManager);
+        when(mMockContext.getSystemService(eq(ConnectivityManager.class)))
+                .thenReturn(mMockConnectivityManager);
         when(mMockContext.getSystemService(eq(SubscriptionManager.class)))
                 .thenReturn(mMockSubscriptionManager);
         when(mMockContext.getSystemService(eq(TelephonyManager.class)))
@@ -1283,6 +1293,43 @@ public class EpdgTunnelManagerTest {
         mTestLooper.dispatchAll();
 
         verify(mMockIkeSession, times(1)).close();
+    }
+
+    @Test
+    public void testIkeSessionConnectionInfoChangedSetsUnderlyingNetwork() throws Exception {
+        String testApnName = "ims";
+        when(mMockConnectivityManager.getLinkProperties(any())).thenReturn(mMockLinkProperties);
+
+        ChildSessionCallback childSessionCallback =
+                verifyBringUpTunnelWithDnsQuery(testApnName, mMockIkeSession);
+        childSessionCallback.onIpSecTransformCreated(
+                mMockedIpSecTransformIn, IpSecManager.DIRECTION_IN);
+
+        mEpdgTunnelManager
+                .getTmIkeSessionCallback(testApnName)
+                .onIkeSessionConnectionInfoChanged(mMockIkeSessionConnectionInfo);
+        mTestLooper.dispatchAll();
+
+        verify(mMockIpSecTunnelInterface, times(1)).setUnderlyingNetwork(mMockNetwork);
+    }
+
+    @Test
+    public void testIkeSessionConnectionInfoChangedWithNullLinkPropertiesDoesNothing()
+            throws Exception {
+        String testApnName = "ims";
+        when(mMockConnectivityManager.getLinkProperties(any())).thenReturn(null);
+
+        ChildSessionCallback childSessionCallback =
+                verifyBringUpTunnelWithDnsQuery(testApnName, mMockIkeSession);
+        childSessionCallback.onIpSecTransformCreated(
+                mMockedIpSecTransformIn, IpSecManager.DIRECTION_IN);
+
+        mEpdgTunnelManager
+                .getTmIkeSessionCallback(testApnName)
+                .onIkeSessionConnectionInfoChanged(mMockIkeSessionConnectionInfo);
+        mTestLooper.dispatchAll();
+
+        verify(mMockIpSecTunnelInterface, times(0)).setUnderlyingNetwork(any());
     }
 
     @Test
