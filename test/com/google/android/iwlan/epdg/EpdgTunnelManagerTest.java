@@ -1084,10 +1084,13 @@ public class EpdgTunnelManagerTest {
         mEpdgTunnelManager.setIsEpdgAddressSelected(true);
     }
 
-    private ChildSessionCallback verifyBringUpTunnelWithDnsQuery(String apnName) {
+    private ChildSessionCallback verifyBringUpTunnelWithDnsQuery(
+            String apnName, IkeSession ikeSession) {
         reset(mMockIwlanTunnelCallback);
 
-        doReturn(null)
+        verifyBringUpTunnel(apnName, true /* needPendingBringUpReq */);
+
+        doReturn(ikeSession)
                 .when(mMockIkeSessionCreator)
                 .createIkeSession(
                         eq(mMockContext),
@@ -1096,8 +1099,6 @@ public class EpdgTunnelManagerTest {
                         any(Executor.class),
                         any(IkeSessionCallback.class),
                         mChildSessionCallbackCaptor.capture());
-
-        verifyBringUpTunnel(apnName, true /* needPendingBringUpReq */);
 
         mEpdgTunnelManager.sendSelectionRequestComplete(
                 EXPECTED_EPDG_ADDRESSES, new IwlanError(IwlanError.NO_ERROR), 1);
@@ -1185,7 +1186,7 @@ public class EpdgTunnelManagerTest {
         final String firstApnName = "ims";
         final String secondApnName = "mms";
 
-        ChildSessionCallback firstCallback = verifyBringUpTunnelWithDnsQuery(firstApnName);
+        ChildSessionCallback firstCallback = verifyBringUpTunnelWithDnsQuery(firstApnName, null);
         verifyBringUpTunnel(secondApnName, true /* needPendingBringUpReq */);
         verifyTunnelOnOpened(firstApnName, firstCallback);
         verifyTunnelOnOpened(secondApnName, mChildSessionCallbackCaptor.getValue());
@@ -1266,6 +1267,22 @@ public class EpdgTunnelManagerTest {
         EpdgTunnelManager.TunnelConfig testApnTunnelConfig =
                 mEpdgTunnelManager.getTunnelConfigForApn(testApnName);
         assertEquals(testApnTunnelConfig.getPcscfAddrList(), EXPECTED_EPDG_ADDRESSES);
+    }
+
+    @Test
+    public void testIkeSessionClosesWhenChildSessionTransformThrows() throws Exception {
+        String testApnName = "ims";
+
+        doThrow(new IllegalArgumentException())
+                .when(mMockIpSecManager)
+                .applyTunnelModeTransform(eq(mMockIpSecTunnelInterface), anyInt(), any());
+        ChildSessionCallback childSessionCallback =
+                verifyBringUpTunnelWithDnsQuery(testApnName, mMockIkeSession);
+        childSessionCallback.onIpSecTransformCreated(
+                mMockedIpSecTransformIn, IpSecManager.DIRECTION_IN);
+        mTestLooper.dispatchAll();
+
+        verify(mMockIkeSession, times(1)).close();
     }
 
     @Test
