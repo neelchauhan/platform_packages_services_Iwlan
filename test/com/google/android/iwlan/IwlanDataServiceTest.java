@@ -243,6 +243,7 @@ public class IwlanDataServiceTest {
 
     @Test
     public void testWifiOnLost() {
+        when(mMockIwlanDataServiceProvider.getSlotIndex()).thenReturn(DEFAULT_SLOT_INDEX + 1);
         mIwlanDataService.addIwlanDataServiceProvider(mMockIwlanDataServiceProvider);
         IwlanNetworkMonitorCallback mNetworkMonitorCallback =
                 mIwlanDataService.getNetworkMonitorCallback();
@@ -253,6 +254,14 @@ public class IwlanDataServiceTest {
         assertFalse(ret);
         verify(mMockIwlanDataServiceProvider).forceCloseTunnelsInDeactivatingState();
         mIwlanDataService.removeDataServiceProvider(mMockIwlanDataServiceProvider);
+    }
+
+    @Test
+    public void testAddDuplicateDataServiceProviderThrows() throws Exception {
+        when(mMockIwlanDataServiceProvider.getSlotIndex()).thenReturn(DEFAULT_SLOT_INDEX);
+        assertThrows(
+                IllegalStateException.class,
+                () -> mIwlanDataService.addIwlanDataServiceProvider(mMockIwlanDataServiceProvider));
     }
 
     @Test
