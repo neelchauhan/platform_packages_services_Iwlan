@@ -75,7 +75,7 @@
       },
       {
         "ErrorType": "IKE_PROTOCOL_ERROR_TYPE",
-        "ErrorDetails": ["24"],
+        "ErrorDetails": ["24", "9002"],
         "RetryArray": ["10", "20", "40", "80", "160"],
         "UnthrottlingEvents": ["APM_ENABLE_EVENT", "WIFI_DISABLE_EVENT", "WIFI_CALLING_DISABLE_EVENT"]
       }
