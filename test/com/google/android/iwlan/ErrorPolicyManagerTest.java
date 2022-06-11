@@ -232,6 +232,20 @@ public class ErrorPolicyManagerTest {
         assertEquals(160, time);
         time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
         assertEquals(86400, time);
+
+        iwlanError = buildIwlanIkeProtocolError(9002);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(10, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(20, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(40, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(80, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(160, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(86400, time);
     }
 
     @Test

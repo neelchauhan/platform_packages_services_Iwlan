@@ -43,6 +43,8 @@ import com.android.internal.annotations.VisibleForTesting;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class IwlanNetworkService extends NetworkService {
     private static final String TAG = IwlanNetworkService.class.getSimpleName();
@@ -51,8 +53,8 @@ public class IwlanNetworkService extends NetworkService {
     private IwlanOnSubscriptionsChangedListener mSubsChangeListener;
     private HandlerThread mNetworkCallbackHandlerThread;
     private static boolean sNetworkConnected;
-    private static List<IwlanNetworkServiceProvider> sIwlanNetworkServiceProviderList =
-            new ArrayList<IwlanNetworkServiceProvider>();
+    private static final Map<Integer, IwlanNetworkServiceProvider> sIwlanNetworkServiceProviders =
+            new ConcurrentHashMap<>();
 
     @VisibleForTesting
     enum Transport {
@@ -133,7 +135,7 @@ public class IwlanNetworkService extends NetworkService {
          */
         @Override
         public void onSubscriptionsChanged() {
-            for (IwlanNetworkServiceProvider np : sIwlanNetworkServiceProviderList) {
+            for (IwlanNetworkServiceProvider np : sIwlanNetworkServiceProviders.values()) {
                 np.subscriptionChanged();
             }
         }
@@ -292,7 +294,7 @@ public class IwlanNetworkService extends NetworkService {
 
         // TODO: validity check slot index
 
-        if (sIwlanNetworkServiceProviderList.isEmpty()) {
+        if (sIwlanNetworkServiceProviders.isEmpty()) {
             // first invocation
             mNetworkCallbackHandlerThread =
                     new HandlerThread(IwlanNetworkService.class.getSimpleName());
@@ -316,7 +318,7 @@ public class IwlanNetworkService extends NetworkService {
         }
 
         IwlanNetworkServiceProvider np = new IwlanNetworkServiceProvider(slotIndex, this);
-        sIwlanNetworkServiceProviderList.add(np);
+        addIwlanNetworkServiceProvider(np);
         return np;
     }
 
@@ -340,14 +342,27 @@ public class IwlanNetworkService extends NetworkService {
         sNetworkConnected = connected;
         sDefaultDataTransport = transport;
 
-        for (IwlanNetworkServiceProvider np : sIwlanNetworkServiceProviderList) {
+        for (IwlanNetworkServiceProvider np : sIwlanNetworkServiceProviders.values()) {
             np.notifyNetworkRegistrationInfoChanged();
         }
     }
 
+    void addIwlanNetworkServiceProvider(IwlanNetworkServiceProvider np) {
+        int slotIndex = np.getSlotIndex();
+        if (sIwlanNetworkServiceProviders.containsKey(slotIndex)) {
+            throw new IllegalStateException(
+                    "NetworkServiceProvider already exists for slot " + slotIndex);
+        }
+        sIwlanNetworkServiceProviders.put(slotIndex, np);
+    }
+
     public void removeNetworkServiceProvider(IwlanNetworkServiceProvider np) {
-        sIwlanNetworkServiceProviderList.remove(np);
-        if (sIwlanNetworkServiceProviderList.isEmpty()) {
+        IwlanNetworkServiceProvider nsp = sIwlanNetworkServiceProviders.remove(np.getSlotIndex());
+        if (nsp == null) {
+            Log.w(TAG, "No NetworkServiceProvider exists for slot " + np.getSlotIndex());
+            return;
+        }
+        if (sIwlanNetworkServiceProviders.isEmpty()) {
             // deinit network related stuff
             ConnectivityManager connectivityManager =
                     mContext.getSystemService(ConnectivityManager.class);
@@ -375,7 +390,7 @@ public class IwlanNetworkService extends NetworkService {
 
     @VisibleForTesting
     IwlanNetworkServiceProvider getNetworkServiceProvider(int slotIndex) {
-        for (IwlanNetworkServiceProvider np : sIwlanNetworkServiceProviderList) {
+        for (IwlanNetworkServiceProvider np : sIwlanNetworkServiceProviders.values()) {
             if (np.getSlotIndex() == slotIndex) {
                 return np;
             }

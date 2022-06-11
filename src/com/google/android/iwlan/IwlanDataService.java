@@ -79,9 +79,8 @@ public class IwlanDataService extends DataService {
     private HandlerThread mNetworkCallbackHandlerThread;
     private static boolean sNetworkConnected = false;
     private static Network sNetwork = null;
-    // TODO: Change this to a hashmap as there is only one provider per slot
-    private static List<IwlanDataServiceProvider> sIwlanDataServiceProviderList =
-            new ArrayList<IwlanDataServiceProvider>();
+    private static final Map<Integer, IwlanDataServiceProvider> sIwlanDataServiceProviders =
+            new ConcurrentHashMap<>();
 
     @VisibleForTesting
     enum Transport {
@@ -138,7 +137,7 @@ public class IwlanDataService extends DataService {
         public void onLinkPropertiesChanged(Network network, LinkProperties linkProperties) {
             Log.d(TAG, "onLinkPropertiesChanged: " + linkProperties);
             if (isLinkProtocolTypeChanged(linkProperties)) {
-                for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
+                for (IwlanDataServiceProvider dp : sIwlanDataServiceProviders.values()) {
                     dp.dnsPrefetchCheck();
                 }
             }
@@ -1262,7 +1261,7 @@ public class IwlanDataService extends DataService {
             if (hasTransportChanged) {
                 // Perform forceClose for tunnels in bringdown.
                 // let framework handle explicit teardown
-                for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
+                for (IwlanDataServiceProvider dp : sIwlanDataServiceProviders.values()) {
                     dp.forceCloseTunnelsInDeactivatingState();
                 }
             }
@@ -1272,14 +1271,14 @@ public class IwlanDataService extends DataService {
             }
             // only prefetch dns and updateNetwork if Network has changed
             if (hasNetworkChanged) {
-                for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
+                for (IwlanDataServiceProvider dp : sIwlanDataServiceProviders.values()) {
                     dp.dnsPrefetchCheck();
                     dp.updateNetwork(sNetwork);
                 }
                 IwlanHelper.updateCountryCodeWhenNetworkConnected();
             }
         } else {
-            for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
+            for (IwlanDataServiceProvider dp : sIwlanDataServiceProviders.values()) {
                 // once network is disconnected, even NAT KA offload fails
                 // But we should still let framework do an explicit teardown
                 // so as to not affect an ongoing handover
@@ -1338,16 +1337,7 @@ public class IwlanDataService extends DataService {
      * @return DataService.DataServiceProvider associated with the slot
      */
     public static DataService.DataServiceProvider getDataServiceProvider(int slotId) {
-        DataServiceProvider ret = null;
-        if (!sIwlanDataServiceProviderList.isEmpty()) {
-            for (IwlanDataServiceProvider provider : sIwlanDataServiceProviderList) {
-                if (provider.getSlotIndex() == slotId) {
-                    ret = provider;
-                    break;
-                }
-            }
-        }
-        return ret;
+        return sIwlanDataServiceProviders.get(slotId);
     }
 
     public static Context getContext() {
@@ -1381,8 +1371,12 @@ public class IwlanDataService extends DataService {
     }
 
     public void removeDataServiceProvider(IwlanDataServiceProvider dp) {
-        sIwlanDataServiceProviderList.remove(dp);
-        if (sIwlanDataServiceProviderList.isEmpty()) {
+        IwlanDataServiceProvider dsp = sIwlanDataServiceProviders.remove(dp.getSlotIndex());
+        if (dsp == null) {
+            Log.w(TAG, "No DataServiceProvider exists for slot " + dp.getSlotIndex());
+            return;
+        }
+        if (sIwlanDataServiceProviders.isEmpty()) {
             // deinit network related stuff
             ConnectivityManager connectivityManager =
                     mContext.getSystemService(ConnectivityManager.class);
@@ -1395,7 +1389,12 @@ public class IwlanDataService extends DataService {
 
     @VisibleForTesting
     void addIwlanDataServiceProvider(IwlanDataServiceProvider dp) {
-        sIwlanDataServiceProviderList.add(dp);
+        int slotIndex = dp.getSlotIndex();
+        if (sIwlanDataServiceProviders.containsKey(slotIndex)) {
+            throw new IllegalStateException(
+                    "DataServiceProvider already exists for slot " + slotIndex);
+        }
+        sIwlanDataServiceProviders.put(slotIndex, dp);
     }
 
     @VisibleForTesting
@@ -1431,7 +1430,7 @@ public class IwlanDataService extends DataService {
         Log.d(TAG, "IwlanService onUnbind");
         // force close all the tunnels when there are no clients
         // active
-        for (IwlanDataServiceProvider dp : sIwlanDataServiceProviderList) {
+        for (IwlanDataServiceProvider dp : sIwlanDataServiceProviders.values()) {
             dp.forceCloseTunnels();
         }
         return super.onUnbind(intent);
@@ -1446,7 +1445,7 @@ public class IwlanDataService extends DataService {
             transport = "WIFI";
         }
         pw.println("Default transport: " + transport);
-        for (IwlanDataServiceProvider provider : sIwlanDataServiceProviderList) {
+        for (IwlanDataServiceProvider provider : sIwlanDataServiceProviders.values()) {
             pw.println();
             provider.dump(fd, pw, args);
             pw.println();
