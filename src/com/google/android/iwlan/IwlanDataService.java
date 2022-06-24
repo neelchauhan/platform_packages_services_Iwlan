@@ -76,9 +76,10 @@ public class IwlanDataService extends DataService {
     private static final String TAG = IwlanDataService.class.getSimpleName();
     private static Context mContext;
     private IwlanNetworkMonitorCallback mNetworkMonitorCallback;
-    private HandlerThread mNetworkCallbackHandlerThread;
     private static boolean sNetworkConnected = false;
     private static Network sNetwork = null;
+    private Handler mIwlanDataServiceHandler;
+    private HandlerThread mIwlanDataServiceHandlerThread;
     private static final Map<Integer, IwlanDataServiceProvider> sIwlanDataServiceProviders =
             new ConcurrentHashMap<>();
 
@@ -102,6 +103,7 @@ public class IwlanDataService extends DataService {
 
     // TODO: see if network monitor callback impl can be shared between dataservice and
     // networkservice
+    // This callback runs in the same thread as IwlanDataServiceHandler
     static class IwlanNetworkMonitorCallback extends ConnectivityManager.NetworkCallback {
 
         /** Called when the framework connects and has declared a new network ready for use. */
@@ -263,7 +265,9 @@ public class IwlanDataService extends DataService {
                 return mState;
             }
 
-            /** @param state (TunnelState.TUNNEL_DOWN|TUNNEL_UP|TUNNEL_DOWN) */
+            /**
+             * @param state (TunnelState.TUNNEL_DOWN|TUNNEL_UP|TUNNEL_DOWN)
+             */
             public void setState(int state) {
                 mState = state;
                 if (mState == TunnelState.TUNNEL_IN_BRINGUP) {
@@ -1186,6 +1190,24 @@ public class IwlanDataService extends DataService {
         }
     }
 
+    private final class IwlanDataServiceHandler extends Handler {
+        private final String TAG = IwlanDataServiceHandler.class.getSimpleName();
+
+        @Override
+        public void handleMessage(Message msg) {
+            Log.d(TAG, "msg.what = " + msg.what);
+
+            switch (msg.what) {
+                default:
+                    throw new IllegalStateException("Unexpected value: " + msg.what);
+            }
+        }
+
+        IwlanDataServiceHandler(Looper looper) {
+            super(looper);
+        }
+    }
+
     @VisibleForTesting
     static synchronized boolean isNetworkConnected(boolean isDds, boolean isCstEnabled) {
         if (!isDds && isCstEnabled) {
@@ -1349,20 +1371,17 @@ public class IwlanDataService extends DataService {
         // TODO: validity check on slot index
         Log.d(TAG, "Creating provider for " + slotIndex);
 
-        if (mNetworkMonitorCallback == null) {
-            // start monitoring network
-            mNetworkCallbackHandlerThread =
-                    new HandlerThread(IwlanNetworkService.class.getSimpleName());
-            mNetworkCallbackHandlerThread.start();
-            Looper looper = mNetworkCallbackHandlerThread.getLooper();
-            Handler handler = new Handler(looper);
+        if (mIwlanDataServiceHandler == null) {
+            initHandler();
+        }
 
-            // register for default network callback
+        if (mNetworkMonitorCallback == null) {
+            // start monitoring network and register for default network callback
             ConnectivityManager connectivityManager =
                     mContext.getSystemService(ConnectivityManager.class);
             mNetworkMonitorCallback = new IwlanNetworkMonitorCallback();
             connectivityManager.registerSystemDefaultNetworkCallback(
-                    mNetworkMonitorCallback, handler);
+                    mNetworkMonitorCallback, mIwlanDataServiceHandler);
             Log.d(TAG, "Registered with Connectivity Service");
         }
 
@@ -1382,9 +1401,12 @@ public class IwlanDataService extends DataService {
             ConnectivityManager connectivityManager =
                     mContext.getSystemService(ConnectivityManager.class);
             connectivityManager.unregisterNetworkCallback(mNetworkMonitorCallback);
-            mNetworkCallbackHandlerThread.quit(); // no need to quitSafely
-            mNetworkCallbackHandlerThread = null;
             mNetworkMonitorCallback = null;
+            if (mIwlanDataServiceHandlerThread != null) {
+                mIwlanDataServiceHandlerThread.quit();
+                mIwlanDataServiceHandlerThread = null;
+            }
+            mIwlanDataServiceHandler = null;
         }
     }
 
@@ -1406,6 +1428,18 @@ public class IwlanDataService extends DataService {
     @VisibleForTesting
     IwlanNetworkMonitorCallback getNetworkMonitorCallback() {
         return mNetworkMonitorCallback;
+    }
+
+    @VisibleForTesting
+    void initHandler() {
+        mIwlanDataServiceHandler = new IwlanDataServiceHandler(getLooper());
+    }
+
+    @VisibleForTesting
+    Looper getLooper() {
+        mIwlanDataServiceHandlerThread = new HandlerThread("IwlanDataServiceThread");
+        mIwlanDataServiceHandlerThread.start();
+        return mIwlanDataServiceHandlerThread.getLooper();
     }
 
     @Override

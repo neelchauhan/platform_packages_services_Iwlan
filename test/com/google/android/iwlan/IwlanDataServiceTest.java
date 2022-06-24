@@ -32,6 +32,7 @@ import android.net.LinkAddress;
 import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.os.test.TestLooper;
 import android.telephony.AccessNetworkConstants.AccessNetworkType;
 import android.telephony.DataFailCause;
 import android.telephony.SubscriptionInfo;
@@ -116,6 +117,7 @@ public class IwlanDataServiceTest {
     private IwlanDataService mIwlanDataService;
     private IwlanDataServiceProvider mIwlanDataServiceProvider;
     private IwlanDataServiceProvider mSpyIwlanDataServiceProvider;
+    private TestLooper mTestLooper = new TestLooper();
 
     private final class IwlanDataServiceCallback extends IDataServiceCallback.Stub {
 
@@ -214,6 +216,7 @@ public class IwlanDataServiceTest {
         when(mMockIPv6LinkAddress.getAddress()).thenReturn(mMockInet6Address);
 
         mIwlanDataService = spy(new IwlanDataService());
+        doReturn(mTestLooper.getLooper()).when(mIwlanDataService).getLooper();
         mIwlanDataService.setAppContext(mMockContext);
         mIwlanDataServiceProvider =
                 (IwlanDataServiceProvider)
