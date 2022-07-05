@@ -31,7 +31,6 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
-import android.support.annotation.GuardedBy;
 import android.support.annotation.IntRange;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -78,10 +77,15 @@ public class IwlanDataService extends DataService {
     private IwlanNetworkMonitorCallback mNetworkMonitorCallback;
     private static boolean sNetworkConnected = false;
     private static Network sNetwork = null;
-    private Handler mIwlanDataServiceHandler;
+    @VisibleForTesting Handler mIwlanDataServiceHandler;
     private HandlerThread mIwlanDataServiceHandlerThread;
     private static final Map<Integer, IwlanDataServiceProvider> sIwlanDataServiceProviders =
             new ConcurrentHashMap<>();
+
+    // Distinguish from the events in IwlanEventListener
+    private static final int EVENT_BASE = 100;
+    private static final int EVENT_TUNNEL_OPENED = EVENT_BASE;
+    private static final int EVENT_TUNNEL_CLOSED = EVENT_BASE + 1;
 
     @VisibleForTesting
     enum Transport {
@@ -181,8 +185,6 @@ public class IwlanDataService extends DataService {
         private final String SUB_TAG;
         private final IwlanDataService mIwlanDataService;
         private final IwlanTunnelCallback mIwlanTunnelCallback;
-        private HandlerThread mHandlerThread;
-        @VisibleForTesting Handler mHandler;
         private boolean mWfcEnabled = false;
         private boolean mCarrierConfigReady = false;
         private EpdgSelector mEpdgSelector;
@@ -190,10 +192,7 @@ public class IwlanDataService extends DataService {
         private CellInfo mCellInfo = null;
 
         // apn to TunnelState
-        // Lock this at public entry and exit points if:
-        // 1) the function changes mTunnelStateForApn
-        // 2) Makes decisions based on contents of mTunnelStateForApn
-        @GuardedBy("mTunnelStateForApn")
+        // Access should be serialized inside IwlanDataServiceHandler
         private Map<String, TunnelState> mTunnelStateForApn = new ConcurrentHashMap<>();
 
         // Holds the state of a tunnel (for an APN)
@@ -348,154 +347,22 @@ public class IwlanDataService extends DataService {
                 Log.d(
                         SUB_TAG,
                         "Tunnel opened!. APN: " + apnName + "linkproperties: " + linkProperties);
-                synchronized (mTunnelStateForApn) {
-                    TunnelState tunnelState = mTunnelStateForApn.get(apnName);
-                    // tunnelstate should not be null, design violation.
-                    // if its null, we should crash and debug.
-                    tunnelState.setTunnelLinkProperties(linkProperties);
-                    tunnelState.setState(TunnelState.TUNNEL_UP);
-                    mTunnelStats.reportTunnelSetupSuccess(apnName, tunnelState);
-
-                    deliverCallback(
-                            CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
-                            DataServiceCallback.RESULT_SUCCESS,
-                            tunnelState.getDataServiceCallback(),
-                            apnTunnelStateToDataCallResponse(apnName));
-                }
+                mIwlanDataServiceHandler.sendMessage(
+                        mIwlanDataServiceHandler.obtainMessage(
+                                EVENT_TUNNEL_OPENED,
+                                new TunnelOpenedData(
+                                        apnName, linkProperties, IwlanDataServiceProvider.this)));
             }
 
             public void onClosed(String apnName, IwlanError error) {
                 Log.d(SUB_TAG, "Tunnel closed!. APN: " + apnName + " Error: " + error);
                 // this is called, when a tunnel that is up, is closed.
                 // the expectation is error==NO_ERROR for user initiated/normal close.
-                synchronized (mTunnelStateForApn) {
-                    TunnelState tunnelState = mTunnelStateForApn.get(apnName);
-                    mTunnelStats.reportTunnelDown(apnName, tunnelState);
-                    mTunnelStateForApn.remove(apnName);
-
-                    if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGUP
-                            || tunnelState.getState()
-                                    == TunnelState.TUNNEL_IN_FORCE_CLEAN_WAS_IN_BRINGUP) {
-                        DataCallResponse.Builder respBuilder = new DataCallResponse.Builder();
-                        respBuilder
-                                .setId(apnName.hashCode())
-                                .setProtocolType(tunnelState.getProtocolType());
-
-                        if (tunnelState.getIsHandover()) {
-                            respBuilder.setHandoverFailureMode(
-                                    DataCallResponse
-                                            .HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_HANDOVER);
-                        } else {
-                            respBuilder.setHandoverFailureMode(
-                                    DataCallResponse
-                                            .HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_SETUP_NORMAL);
-                        }
-
-                        if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGUP) {
-                            respBuilder.setCause(
-                                    ErrorPolicyManager.getInstance(mContext, getSlotIndex())
-                                            .getDataFailCause(apnName));
-                            respBuilder.setRetryDurationMillis(
-                                    ErrorPolicyManager.getInstance(mContext, getSlotIndex())
-                                            .getCurrentRetryTimeMs(apnName));
-                        } else if (tunnelState.getState()
-                                == TunnelState.TUNNEL_IN_FORCE_CLEAN_WAS_IN_BRINGUP) {
-                            respBuilder.setCause(DataFailCause.IWLAN_NETWORK_FAILURE);
-                            respBuilder.setRetryDurationMillis(5000);
-                        }
-
-                        deliverCallback(
-                                CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
-                                DataServiceCallback.RESULT_SUCCESS,
-                                tunnelState.getDataServiceCallback(),
-                                respBuilder.build());
-                        return;
-                    }
-
-                    // iwlan service triggered teardown
-                    if (tunnelState.getState() == TunnelState.TUNNEL_IN_BRINGDOWN) {
-
-                        // IO exception happens when IKE library fails to retransmit requests.
-                        // This can happen for multiple reasons:
-                        // 1. Network disconnection due to wifi off.
-                        // 2. Epdg server does not respond.
-                        // 3. Socket send/receive fails.
-                        // Ignore this during tunnel bring down.
-                        if (error.getErrorType() != IwlanError.NO_ERROR
-                                && error.getErrorType() != IwlanError.IKE_INTERNAL_IO_EXCEPTION) {
-                            Log.e(SUB_TAG, "Unexpected error during tunnel bring down: " + error);
-                        }
-
-                        deliverCallback(
-                                CALLBACK_TYPE_DEACTIVATE_DATACALL_COMPLETE,
-                                DataServiceCallback.RESULT_SUCCESS,
-                                tunnelState.getDataServiceCallback(),
-                                null);
-
-                        return;
-                    }
-
-                    // just update list of data calls. No way to send error up
-                    notifyDataCallListChanged(getCallList());
-                }
-            }
-        }
-
-        private final class DSPHandler extends Handler {
-            private final String TAG =
-                    IwlanDataService.class.getSimpleName()
-                            + DSPHandler.class.getSimpleName()
-                            + getSlotIndex();
-
-            @Override
-            public void handleMessage(Message msg) {
-                Log.d(TAG, "msg.what = " + msg.what);
-                switch (msg.what) {
-                    case IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT:
-                        Log.d(TAG, "On CARRIER_CONFIG_CHANGED_EVENT");
-                        mCarrierConfigReady = true;
-                        dnsPrefetchCheck();
-                        break;
-                    case IwlanEventListener.CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT:
-                        Log.d(TAG, "On CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT");
-                        mCarrierConfigReady = false;
-                        break;
-                    case IwlanEventListener.WIFI_CALLING_ENABLE_EVENT:
-                        Log.d(TAG, "On WIFI_CALLING_ENABLE_EVENT");
-                        mWfcEnabled = true;
-                        dnsPrefetchCheck();
-                        break;
-                    case IwlanEventListener.WIFI_CALLING_DISABLE_EVENT:
-                        Log.d(TAG, "On WIFI_CALLING_DISABLE_EVENT");
-                        mWfcEnabled = false;
-                        break;
-                    case IwlanEventListener.CELLINFO_CHANGED_EVENT:
-                        Log.d(TAG, "On CELLINFO_CHANGED_EVENT");
-                        List<CellInfo> cellInfolist = (List<CellInfo>) msg.obj;
-
-                        if (cellInfolist != null && isRegisteredCellInfoChanged(cellInfolist)) {
-                            int[] addrResolutionMethods =
-                                    IwlanHelper.getConfig(
-                                            CarrierConfigManager.Iwlan
-                                                    .KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
-                                            mContext,
-                                            getSlotIndex());
-                            for (int addrResolutionMethod : addrResolutionMethods) {
-                                if (addrResolutionMethod
-                                        == CarrierConfigManager.Iwlan.EPDG_ADDRESS_CELLULAR_LOC) {
-                                    dnsPrefetchCheck();
-                                }
-                            }
-                        }
-                        break;
-                    default:
-                        Log.d(TAG, "Unknown message received!");
-                        break;
-                }
-            }
-
-            DSPHandler(Looper looper) {
-                super(looper);
+                mIwlanDataServiceHandler.sendMessage(
+                        mIwlanDataServiceHandler.obtainMessage(
+                                EVENT_TUNNEL_CLOSED,
+                                new TunnelClosedData(
+                                        apnName, error, IwlanDataServiceProvider.this)));
             }
         }
 
@@ -640,12 +507,6 @@ public class IwlanDataService extends DataService {
             }
         }
 
-        Looper getLooper() {
-            mHandlerThread = new HandlerThread("DSPHandlerThread");
-            mHandlerThread.start();
-            return mHandlerThread.getLooper();
-        }
-
         /**
          * Constructor
          *
@@ -664,18 +525,14 @@ public class IwlanDataService extends DataService {
             mTunnelStats = new IwlanDataTunnelStats();
 
             // Register IwlanEventListener
-            initHandler();
             List<Integer> events = new ArrayList<Integer>();
             events.add(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT);
             events.add(IwlanEventListener.CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT);
             events.add(IwlanEventListener.WIFI_CALLING_ENABLE_EVENT);
             events.add(IwlanEventListener.WIFI_CALLING_DISABLE_EVENT);
             events.add(IwlanEventListener.CELLINFO_CHANGED_EVENT);
-            IwlanEventListener.getInstance(mContext, slotIndex).addEventListener(events, mHandler);
-        }
-
-        void initHandler() {
-            mHandler = new DSPHandler(getLooper());
+            IwlanEventListener.getInstance(mContext, slotIndex)
+                    .addEventListener(events, mIwlanDataServiceHandler);
         }
 
         @VisibleForTesting
@@ -847,8 +704,6 @@ public class IwlanDataService extends DataService {
                             + ", pduSessionId: "
                             + pduSessionId);
 
-            // Framework will never call bringup on the same APN back 2 back.
-            // but add a safety check
             if ((accessNetworkType != AccessNetworkType.IWLAN)
                     || (dataProfile == null)
                     || (linkProperties == null && reason == DataService.REQUEST_REASON_HANDOVER)) {
@@ -1163,8 +1018,8 @@ public class IwlanDataService extends DataService {
         public void close() {
             // TODO: call epdgtunnelmanager.releaseInstance or equivalent
             mIwlanDataService.removeDataServiceProvider(this);
-            IwlanEventListener.getInstance(mContext, getSlotIndex()).removeEventListener(mHandler);
-            mHandlerThread.quit();
+            IwlanEventListener.getInstance(mContext, getSlotIndex())
+                    .removeEventListener(mIwlanDataServiceHandler);
         }
 
         public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
@@ -1197,7 +1052,179 @@ public class IwlanDataService extends DataService {
         public void handleMessage(Message msg) {
             Log.d(TAG, "msg.what = " + msg.what);
 
+            String apnName;
+            IwlanDataServiceProvider iwlanDataServiceProvider;
+
             switch (msg.what) {
+                case EVENT_TUNNEL_OPENED:
+                    TunnelOpenedData tunnelOpenedData = (TunnelOpenedData) msg.obj;
+                    iwlanDataServiceProvider = tunnelOpenedData.mIwlanDataServiceProvider;
+                    apnName = tunnelOpenedData.mApnName;
+                    TunnelLinkProperties tunnelLinkProperties =
+                            tunnelOpenedData.mTunnelLinkProperties;
+
+                    synchronized (iwlanDataServiceProvider.mTunnelStateForApn) {
+                        IwlanDataServiceProvider.TunnelState tunnelState =
+                                iwlanDataServiceProvider.mTunnelStateForApn.get(apnName);
+                        // tunnelstate should not be null, design violation.
+                        // if its null, we should crash and debug.
+                        tunnelState.setTunnelLinkProperties(tunnelLinkProperties);
+                        tunnelState.setState(IwlanDataServiceProvider.TunnelState.TUNNEL_UP);
+                        iwlanDataServiceProvider.mTunnelStats.reportTunnelSetupSuccess(
+                                apnName, tunnelState);
+
+                        iwlanDataServiceProvider.deliverCallback(
+                                IwlanDataServiceProvider.CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
+                                DataServiceCallback.RESULT_SUCCESS,
+                                tunnelState.getDataServiceCallback(),
+                                iwlanDataServiceProvider.apnTunnelStateToDataCallResponse(apnName));
+                    }
+                    break;
+                case EVENT_TUNNEL_CLOSED:
+                    TunnelClosedData tunnelClosedData = (TunnelClosedData) msg.obj;
+                    iwlanDataServiceProvider = tunnelClosedData.mIwlanDataServiceProvider;
+                    apnName = tunnelClosedData.mApnName;
+                    IwlanError iwlanError = tunnelClosedData.mIwlanError;
+
+                    synchronized (iwlanDataServiceProvider.mTunnelStateForApn) {
+                        IwlanDataServiceProvider.TunnelState tunnelState =
+                                iwlanDataServiceProvider.mTunnelStateForApn.get(apnName);
+                        iwlanDataServiceProvider.mTunnelStats.reportTunnelDown(
+                                apnName, tunnelState);
+                        iwlanDataServiceProvider.mTunnelStateForApn.remove(apnName);
+
+                        if (tunnelState.getState()
+                                        == IwlanDataServiceProvider.TunnelState.TUNNEL_IN_BRINGUP
+                                || tunnelState.getState()
+                                        == IwlanDataServiceProvider.TunnelState
+                                                .TUNNEL_IN_FORCE_CLEAN_WAS_IN_BRINGUP) {
+                            DataCallResponse.Builder respBuilder = new DataCallResponse.Builder();
+                            respBuilder
+                                    .setId(apnName.hashCode())
+                                    .setProtocolType(tunnelState.getProtocolType());
+
+                            if (tunnelState.getIsHandover()) {
+                                respBuilder.setHandoverFailureMode(
+                                        DataCallResponse
+                                                .HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_HANDOVER);
+                            } else {
+                                respBuilder.setHandoverFailureMode(
+                                        DataCallResponse
+                                                .HANDOVER_FAILURE_MODE_NO_FALLBACK_RETRY_SETUP_NORMAL);
+                            }
+
+                            if (tunnelState.getState()
+                                    == IwlanDataServiceProvider.TunnelState.TUNNEL_IN_BRINGUP) {
+                                respBuilder.setCause(
+                                        ErrorPolicyManager.getInstance(
+                                                        mContext,
+                                                        iwlanDataServiceProvider.getSlotIndex())
+                                                .getDataFailCause(apnName));
+                                respBuilder.setRetryDurationMillis(
+                                        ErrorPolicyManager.getInstance(
+                                                        mContext,
+                                                        iwlanDataServiceProvider.getSlotIndex())
+                                                .getCurrentRetryTimeMs(apnName));
+                            } else if (tunnelState.getState()
+                                    == IwlanDataServiceProvider.TunnelState
+                                            .TUNNEL_IN_FORCE_CLEAN_WAS_IN_BRINGUP) {
+                                respBuilder.setCause(DataFailCause.IWLAN_NETWORK_FAILURE);
+                                respBuilder.setRetryDurationMillis(5000);
+                            }
+
+                            iwlanDataServiceProvider.deliverCallback(
+                                    IwlanDataServiceProvider.CALLBACK_TYPE_SETUP_DATACALL_COMPLETE,
+                                    DataServiceCallback.RESULT_SUCCESS,
+                                    tunnelState.getDataServiceCallback(),
+                                    respBuilder.build());
+                            return;
+                        }
+
+                        // iwlan service triggered teardown
+                        if (tunnelState.getState()
+                                == IwlanDataServiceProvider.TunnelState.TUNNEL_IN_BRINGDOWN) {
+
+                            // IO exception happens when IKE library fails to retransmit requests.
+                            // This can happen for multiple reasons:
+                            // 1. Network disconnection due to wifi off.
+                            // 2. Epdg server does not respond.
+                            // 3. Socket send/receive fails.
+                            // Ignore this during tunnel bring down.
+                            if (iwlanError.getErrorType() != IwlanError.NO_ERROR
+                                    && iwlanError.getErrorType()
+                                            != IwlanError.IKE_INTERNAL_IO_EXCEPTION) {
+                                Log.e(
+                                        TAG,
+                                        "Unexpected error during tunnel bring down: " + iwlanError);
+                            }
+
+                            iwlanDataServiceProvider.deliverCallback(
+                                    IwlanDataServiceProvider
+                                            .CALLBACK_TYPE_DEACTIVATE_DATACALL_COMPLETE,
+                                    DataServiceCallback.RESULT_SUCCESS,
+                                    tunnelState.getDataServiceCallback(),
+                                    null);
+
+                            return;
+                        }
+
+                        // just update list of data calls. No way to send error up
+                        iwlanDataServiceProvider.notifyDataCallListChanged(
+                                iwlanDataServiceProvider.getCallList());
+                    }
+                    break;
+                case IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT:
+                    Log.d(TAG, "On CARRIER_CONFIG_CHANGED_EVENT");
+                    iwlanDataServiceProvider =
+                            (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
+
+                    iwlanDataServiceProvider.mCarrierConfigReady = true;
+                    iwlanDataServiceProvider.dnsPrefetchCheck();
+                    break;
+                case IwlanEventListener.CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT:
+                    Log.d(TAG, "On CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT");
+                    iwlanDataServiceProvider =
+                            (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
+
+                    iwlanDataServiceProvider.mCarrierConfigReady = false;
+                    break;
+                case IwlanEventListener.WIFI_CALLING_ENABLE_EVENT:
+                    Log.d(TAG, "On WIFI_CALLING_ENABLE_EVENT");
+                    iwlanDataServiceProvider =
+                            (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
+
+                    iwlanDataServiceProvider.mWfcEnabled = true;
+                    iwlanDataServiceProvider.dnsPrefetchCheck();
+                    break;
+                case IwlanEventListener.WIFI_CALLING_DISABLE_EVENT:
+                    Log.d(TAG, "On WIFI_CALLING_DISABLE_EVENT");
+                    iwlanDataServiceProvider =
+                            (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
+
+                    iwlanDataServiceProvider.mWfcEnabled = false;
+                    break;
+                case IwlanEventListener.CELLINFO_CHANGED_EVENT:
+                    Log.d(TAG, "On CELLINFO_CHANGED_EVENT");
+                    List<CellInfo> cellInfolist = (List<CellInfo>) msg.obj;
+                    iwlanDataServiceProvider =
+                            (IwlanDataServiceProvider) getDataServiceProvider(msg.arg1);
+
+                    if (cellInfolist != null
+                            && iwlanDataServiceProvider.isRegisteredCellInfoChanged(cellInfolist)) {
+                        int[] addrResolutionMethods =
+                                IwlanHelper.getConfig(
+                                        CarrierConfigManager.Iwlan
+                                                .KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
+                                        mContext,
+                                        iwlanDataServiceProvider.getSlotIndex());
+                        for (int addrResolutionMethod : addrResolutionMethods) {
+                            if (addrResolutionMethod
+                                    == CarrierConfigManager.Iwlan.EPDG_ADDRESS_CELLULAR_LOC) {
+                                iwlanDataServiceProvider.dnsPrefetchCheck();
+                            }
+                        }
+                    }
+                    break;
                 default:
                     throw new IllegalStateException("Unexpected value: " + msg.what);
             }
@@ -1205,6 +1232,34 @@ public class IwlanDataService extends DataService {
 
         IwlanDataServiceHandler(Looper looper) {
             super(looper);
+        }
+    }
+
+    private static final class TunnelOpenedData {
+        final String mApnName;
+        final TunnelLinkProperties mTunnelLinkProperties;
+        final IwlanDataServiceProvider mIwlanDataServiceProvider;
+
+        private TunnelOpenedData(
+                String apnName,
+                TunnelLinkProperties tunnelLinkProperties,
+                IwlanDataServiceProvider dsp) {
+            mApnName = apnName;
+            mTunnelLinkProperties = tunnelLinkProperties;
+            mIwlanDataServiceProvider = dsp;
+        }
+    }
+
+    private static final class TunnelClosedData {
+        final String mApnName;
+        final IwlanError mIwlanError;
+        final IwlanDataServiceProvider mIwlanDataServiceProvider;
+
+        private TunnelClosedData(
+                String apnName, IwlanError iwlanError, IwlanDataServiceProvider dsp) {
+            mApnName = apnName;
+            mIwlanError = iwlanError;
+            mIwlanDataServiceProvider = dsp;
         }
     }
 

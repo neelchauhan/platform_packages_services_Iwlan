@@ -121,7 +121,10 @@ public class IwlanEventListenerTest {
 
     @Test
     public void testWifiApChanged() throws Exception {
-        when(mMockHandler.obtainMessage(eq(IwlanEventListener.WIFI_AP_CHANGED_EVENT)))
+        when(mMockHandler.obtainMessage(
+                        eq(IwlanEventListener.WIFI_AP_CHANGED_EVENT),
+                        eq(DEFAULT_SLOT_INDEX),
+                        anyInt()))
                 .thenReturn(mMockMessage);
 
         events = new ArrayList<Integer>();
@@ -140,7 +143,10 @@ public class IwlanEventListenerTest {
 
     @Test
     public void testCrossSimCallingSettingEnableChanged() throws Exception {
-        when(mMockHandler.obtainMessage(eq(IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT)))
+        when(mMockHandler.obtainMessage(
+                        eq(IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT),
+                        eq(DEFAULT_SLOT_INDEX),
+                        anyInt()))
                 .thenReturn(mMockMessage);
 
         events = new ArrayList<Integer>();
@@ -161,7 +167,10 @@ public class IwlanEventListenerTest {
 
     @Test
     public void testCrossSimCallingSettingDisableChanged() throws Exception {
-        when(mMockHandler.obtainMessage(eq(IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT)))
+        when(mMockHandler.obtainMessage(
+                        eq(IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT),
+                        eq(DEFAULT_SLOT_INDEX),
+                        anyInt()))
                 .thenReturn(mMockMessage);
 
         events = new ArrayList<Integer>();
@@ -182,10 +191,15 @@ public class IwlanEventListenerTest {
 
     @Test
     public void testOnReceivedCarrierConfigChangedIntent() throws Exception {
-        when(mMockHandler.obtainMessage(eq(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)))
+        when(mMockHandler.obtainMessage(
+                        eq(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT),
+                        eq(DEFAULT_SLOT_INDEX),
+                        anyInt()))
                 .thenReturn(mMockMessage);
         when(mMockHandler.obtainMessage(
-                        eq(IwlanEventListener.CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT)))
+                        eq(IwlanEventListener.CARRIER_CONFIG_UNKNOWN_CARRIER_EVENT),
+                        eq(DEFAULT_SLOT_INDEX),
+                        anyInt()))
                 .thenReturn(mMockMessage_2);
 
         events = new ArrayList<Integer>();
@@ -217,9 +231,15 @@ public class IwlanEventListenerTest {
 
     @Test
     public void testWfcSettingChanged() throws Exception {
-        when(mMockHandler.obtainMessage(eq(IwlanEventListener.WIFI_CALLING_ENABLE_EVENT)))
+        when(mMockHandler.obtainMessage(
+                        eq(IwlanEventListener.WIFI_CALLING_ENABLE_EVENT),
+                        eq(DEFAULT_SLOT_INDEX),
+                        anyInt()))
                 .thenReturn(mMockMessage);
-        when(mMockHandler.obtainMessage(eq(IwlanEventListener.WIFI_CALLING_DISABLE_EVENT)))
+        when(mMockHandler.obtainMessage(
+                        eq(IwlanEventListener.WIFI_CALLING_DISABLE_EVENT),
+                        eq(DEFAULT_SLOT_INDEX),
+                        anyInt()))
                 .thenReturn(mMockMessage_2);
 
         events = new ArrayList<Integer>();
@@ -242,7 +262,11 @@ public class IwlanEventListenerTest {
                 .when(IwlanHelper.getSubId(eq(mMockContext), eq(DEFAULT_SLOT_INDEX)))
                 .thenReturn(0);
 
-        when(mMockHandler.obtainMessage(eq(IwlanEventListener.CELLINFO_CHANGED_EVENT), eq(arrayCi)))
+        when(mMockHandler.obtainMessage(
+                        eq(IwlanEventListener.CELLINFO_CHANGED_EVENT),
+                        eq(DEFAULT_SLOT_INDEX),
+                        anyInt(),
+                        eq(arrayCi)))
                 .thenReturn(mMockMessage);
 
         events = new ArrayList<Integer>();

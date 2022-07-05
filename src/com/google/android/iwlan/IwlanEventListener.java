@@ -485,7 +485,7 @@ public class IwlanEventListener {
         if (eventHandlers.contains(event)) {
             Log.d(SUB_TAG, "Updating handlers for the event: " + event);
             for (Handler handler : eventHandlers.get(event)) {
-                handler.obtainMessage(event).sendToTarget();
+                handler.obtainMessage(event, mSlotId, 0 /* unused */).sendToTarget();
             }
         }
     }
@@ -494,7 +494,7 @@ public class IwlanEventListener {
         if (eventHandlers.contains(event)) {
             Log.d(SUB_TAG, "Updating handlers for the event: " + event);
             for (Handler handler : eventHandlers.get(event)) {
-                handler.obtainMessage(event, arrayCi).sendToTarget();
+                handler.obtainMessage(event, mSlotId, 0 /* unused */, arrayCi).sendToTarget();
             }
         }
     }
