@@ -75,6 +75,9 @@ public class EpdgSelectorTest {
     private static final String TEST_IP_ADDRESS = "127.0.0.1";
     private static final String TEST_IP_ADDRESS_1 = "127.0.0.2";
     private static final String TEST_IP_ADDRESS_2 = "127.0.0.3";
+    private static final String TEST_IP_ADDRESS_3 = "127.0.0.4";
+    private static final String TEST_IP_ADDRESS_4 = "127.0.0.5";
+    private static final String TEST_IP_ADDRESS_5 = "127.0.0.6";
     private static final String TEST_IPV6_ADDRESS = "0000:0000:0000:0000:0000:0000:0000:0001";
 
     private static int testPcoIdIPv6 = 0xFF01;
@@ -229,18 +232,9 @@ public class EpdgSelectorTest {
     }
 
     private void testPlmnResolutionMethod(boolean isEmergency) throws Exception {
-        String expectedFqdn1 =
-                (isEmergency)
-                        ? "sos.epdg.epc.mnc480.mcc310.pub.3gppnetwork.org"
-                        : "epdg.epc.mnc480.mcc310.pub.3gppnetwork.org";
-        String expectedFqdn2 =
-                (isEmergency)
-                        ? "sos.epdg.epc.mnc120.mcc300.pub.3gppnetwork.org"
-                        : "epdg.epc.mnc120.mcc300.pub.3gppnetwork.org";
-        String expectedFqdn3 =
-                (isEmergency)
-                        ? "sos.epdg.epc.mnc120.mcc311.pub.3gppnetwork.org"
-                        : "epdg.epc.mnc120.mcc311.pub.3gppnetwork.org";
+        String expectedFqdnFromHplmn = "epdg.epc.mnc120.mcc311.pub.3gppnetwork.org";
+        String expectedFqdnFromEHplmn = "epdg.epc.mnc120.mcc300.pub.3gppnetwork.org";
+        String expectedFqdnFromConfig = "epdg.epc.mnc480.mcc310.pub.3gppnetwork.org";
 
         mTestBundle.putIntArray(
                 CarrierConfigManager.Iwlan.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
@@ -249,17 +243,33 @@ public class EpdgSelectorTest {
                 CarrierConfigManager.Iwlan.KEY_MCC_MNCS_STRING_ARRAY,
                 new String[] {"310-480", "300-120", "311-120"});
 
-        mFakeDns.setAnswer(expectedFqdn1, new String[] {TEST_IP_ADDRESS_1}, TYPE_A);
-        mFakeDns.setAnswer(expectedFqdn2, new String[] {TEST_IP_ADDRESS_2}, TYPE_A);
-        mFakeDns.setAnswer(expectedFqdn3, new String[] {TEST_IP_ADDRESS}, TYPE_A);
+        mFakeDns.setAnswer(expectedFqdnFromHplmn, new String[] {TEST_IP_ADDRESS}, TYPE_A);
+        mFakeDns.setAnswer(expectedFqdnFromEHplmn, new String[] {TEST_IP_ADDRESS_1}, TYPE_A);
+        mFakeDns.setAnswer(expectedFqdnFromConfig, new String[] {TEST_IP_ADDRESS_2}, TYPE_A);
+        mFakeDns.setAnswer(
+                "sos." + expectedFqdnFromHplmn, new String[] {TEST_IP_ADDRESS_3}, TYPE_A);
+        mFakeDns.setAnswer(
+                "sos." + expectedFqdnFromEHplmn, new String[] {TEST_IP_ADDRESS_4}, TYPE_A);
+        mFakeDns.setAnswer(
+                "sos." + expectedFqdnFromConfig, new String[] {TEST_IP_ADDRESS_5}, TYPE_A);
 
         ArrayList<InetAddress> testInetAddresses =
                 getValidatedServerListWithDefaultParams(isEmergency);
 
-        assertEquals(testInetAddresses.size(), 3);
-        assertEquals(testInetAddresses.get(0), InetAddress.getByName(TEST_IP_ADDRESS));
-        assertEquals(testInetAddresses.get(1), InetAddress.getByName(TEST_IP_ADDRESS_2));
-        assertEquals(testInetAddresses.get(2), InetAddress.getByName(TEST_IP_ADDRESS_1));
+        if (isEmergency) {
+            assertEquals(6, testInetAddresses.size());
+            assertEquals(InetAddress.getByName(TEST_IP_ADDRESS_3), testInetAddresses.get(0));
+            assertEquals(InetAddress.getByName(TEST_IP_ADDRESS), testInetAddresses.get(1));
+            assertEquals(InetAddress.getByName(TEST_IP_ADDRESS_4), testInetAddresses.get(2));
+            assertEquals(InetAddress.getByName(TEST_IP_ADDRESS_1), testInetAddresses.get(3));
+            assertEquals(InetAddress.getByName(TEST_IP_ADDRESS_5), testInetAddresses.get(4));
+            assertEquals(InetAddress.getByName(TEST_IP_ADDRESS_2), testInetAddresses.get(5));
+        } else {
+            assertEquals(3, testInetAddresses.size());
+            assertEquals(InetAddress.getByName(TEST_IP_ADDRESS), testInetAddresses.get(0));
+            assertEquals(InetAddress.getByName(TEST_IP_ADDRESS_1), testInetAddresses.get(1));
+            assertEquals(InetAddress.getByName(TEST_IP_ADDRESS_2), testInetAddresses.get(2));
+        }
     }
 
     @Test
@@ -492,7 +502,7 @@ public class EpdgSelectorTest {
             // Full match or partial match that target host contains the entry hostname to support
             // random private dns probe hostname.
             private boolean matches(String hostname, int type) {
-                return hostname.endsWith(mHostname) && type == mType;
+                return hostname.equals(mHostname) && type == mType;
             }
         }
 
