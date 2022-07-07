@@ -1361,7 +1361,8 @@ public class IwlanDataService extends DataService {
             ConnectivityManager connectivityManager =
                     mContext.getSystemService(ConnectivityManager.class);
             mNetworkMonitorCallback = new IwlanNetworkMonitorCallback();
-            connectivityManager.registerDefaultNetworkCallback(mNetworkMonitorCallback, handler);
+            connectivityManager.registerSystemDefaultNetworkCallback(
+                    mNetworkMonitorCallback, handler);
             Log.d(TAG, "Registered with Connectivity Service");
         }
 
