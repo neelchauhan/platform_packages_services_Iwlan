@@ -82,8 +82,7 @@ public class IwlanDataService extends DataService {
     private static final Map<Integer, IwlanDataServiceProvider> sIwlanDataServiceProviders =
             new ConcurrentHashMap<>();
 
-    // Distinguish from the events in IwlanEventListener
-    private static final int EVENT_BASE = 100;
+    private static final int EVENT_BASE = IwlanEventListener.DATA_SERVICE_INTERNAL_EVENT_BASE;
     private static final int EVENT_TUNNEL_OPENED = EVENT_BASE;
     private static final int EVENT_TUNNEL_CLOSED = EVENT_BASE + 1;
     private static final int EVENT_SETUP_DATA_CALL = EVENT_BASE + 2;
