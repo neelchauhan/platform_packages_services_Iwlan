@@ -178,6 +178,11 @@ public class ErrorPolicyManager {
         return mInstances.computeIfAbsent(slotId, k -> new ErrorPolicyManager(context, slotId));
     }
 
+    @VisibleForTesting
+    public static void resetAllInstances() {
+        mInstances.clear();
+    }
+
     /**
      * Release or reset the instance.
      *
