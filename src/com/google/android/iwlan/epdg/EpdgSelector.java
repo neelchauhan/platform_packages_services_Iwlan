@@ -394,9 +394,19 @@ public class EpdgSelector {
              * sos.epdg.epc.mnc<MNC>.mcc<MCC>.pub.3gppnetwork.org
              */
             if (isEmergency) {
-                domainName.append("sos.");
+                domainName = new StringBuilder();
+                domainName
+                        .append("sos.")
+                        .append("epdg.epc.mnc")
+                        .append(mccmnc[1])
+                        .append(".mcc")
+                        .append(mccmnc[0])
+                        .append(".pub.3gppnetwork.org");
+                getIP(domainName.toString(), filter, validIpList, network);
+                domainName.setLength(0);
             }
-
+            // For emergency PDN setup, still adding FQDN without "sos" header as second priority
+            // because some operator doesn't support hostname with "sos" prefix.
             domainName
                     .append("epdg.epc.mnc")
                     .append(mccmnc[1])
