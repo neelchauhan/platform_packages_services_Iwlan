@@ -164,6 +164,7 @@ public class EpdgTunnelManagerTest {
 
     @Before
     public void setUp() throws Exception {
+        EpdgTunnelManager.resetAllInstances();
         mEpdgTunnelManager = spy(EpdgTunnelManager.getInstance(mMockContext, DEFAULT_SLOT_INDEX));
 
         when(mMockContext.getSystemService(eq(IpSecManager.class))).thenReturn(mMockIpSecManager);

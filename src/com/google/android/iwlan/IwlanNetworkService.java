@@ -26,6 +26,7 @@ import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.os.Handler;
+import android.os.HandlerExecutor;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
@@ -51,10 +52,16 @@ public class IwlanNetworkService extends NetworkService {
     private Context mContext;
     private IwlanNetworkMonitorCallback mNetworkMonitorCallback;
     private IwlanOnSubscriptionsChangedListener mSubsChangeListener;
-    private HandlerThread mNetworkCallbackHandlerThread;
+    private Handler mIwlanNetworkServiceHandler;
+    private HandlerThread mIwlanNetworkServiceHandlerThread;
     private static boolean sNetworkConnected;
     private static final Map<Integer, IwlanNetworkServiceProvider> sIwlanNetworkServiceProviders =
             new ConcurrentHashMap<>();
+
+    private static final int EVENT_BASE = IwlanEventListener.NETWORK_SERVICE_INTERNAL_EVENT_BASE;
+    private static final int EVENT_NETWORK_REGISTRATION_INFO_REQUEST = EVENT_BASE;
+    private static final int EVENT_CREATE_NETWORK_SERVICE_PROVIDER = EVENT_BASE + 1;
+    private static final int EVENT_REMOVE_NETWORK_SERVICE_PROVIDER = EVENT_BASE + 2;
 
     @VisibleForTesting
     enum Transport {
@@ -65,6 +72,7 @@ public class IwlanNetworkService extends NetworkService {
 
     private static Transport sDefaultDataTransport = Transport.UNSPECIFIED_NETWORK;
 
+    // This callback runs in the same thread as IwlanNetworkServiceHandler
     final class IwlanNetworkMonitorCallback extends ConnectivityManager.NetworkCallback {
         /** Called when the framework connects and has declared a new network ready for use. */
         @Override
@@ -146,45 +154,6 @@ public class IwlanNetworkService extends NetworkService {
         private final IwlanNetworkService mIwlanNetworkService;
         private final String SUB_TAG;
         private boolean mIsSubActive = false;
-        private HandlerThread mHandlerThread;
-        private Handler mHandler;
-
-        private final class NSPHandler extends Handler {
-            private final String TAG =
-                    IwlanNetworkService.class.getSimpleName()
-                            + NSPHandler.class.getSimpleName()
-                            + "["
-                            + getSlotIndex()
-                            + "]";
-
-            @Override
-            public void handleMessage(Message msg) {
-                Log.d(TAG, "msg.what = " + msg.what);
-                switch (msg.what) {
-                    case IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT:
-                        Log.d(TAG, "CROSS_SIM_CALLING_ENABLE_EVENT");
-                        notifyNetworkRegistrationInfoChanged();
-                        break;
-                    case IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT:
-                        Log.d(TAG, "CROSS_SIM_CALLING_DISABLE_EVENT");
-                        notifyNetworkRegistrationInfoChanged();
-                        break;
-                    default:
-                        Log.d(TAG, "Unknown message received!");
-                        break;
-                }
-            }
-
-            NSPHandler(Looper looper) {
-                super(looper);
-            }
-        }
-
-        Looper getLooper() {
-            mHandlerThread = new HandlerThread("NSPHandlerThread");
-            mHandlerThread.start();
-            return mHandlerThread.getLooper();
-        }
 
         /**
          * Constructor
@@ -197,53 +166,19 @@ public class IwlanNetworkService extends NetworkService {
             mIwlanNetworkService = iwlanNetworkService;
 
             // Register IwlanEventListener
-            initHandler();
             List<Integer> events = new ArrayList<Integer>();
             events.add(IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT);
             events.add(IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT);
-            IwlanEventListener.getInstance(mContext, slotIndex).addEventListener(events, mHandler);
-        }
-
-        void initHandler() {
-            mHandler = new NSPHandler(getLooper());
+            IwlanEventListener.getInstance(mContext, slotIndex)
+                    .addEventListener(events, mIwlanNetworkServiceHandler);
         }
 
         @Override
         public void requestNetworkRegistrationInfo(int domain, NetworkServiceCallback callback) {
-            if (callback == null) {
-                Log.d(SUB_TAG, "Error: callback is null. returning");
-                return;
-            }
-            if (domain != NetworkRegistrationInfo.DOMAIN_PS) {
-                callback.onRequestNetworkRegistrationInfoComplete(
-                        NetworkServiceCallback.RESULT_ERROR_UNSUPPORTED, null);
-                return;
-            }
-
-            NetworkRegistrationInfo.Builder nriBuilder = new NetworkRegistrationInfo.Builder();
-            nriBuilder
-                    .setAvailableServices(Arrays.asList(NetworkRegistrationInfo.SERVICE_TYPE_DATA))
-                    .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WLAN)
-                    .setEmergencyOnly(!mIsSubActive)
-                    .setDomain(NetworkRegistrationInfo.DOMAIN_PS);
-
-            if (!IwlanNetworkService.isNetworkConnected(
-                    IwlanHelper.isDefaultDataSlot(mContext, getSlotIndex()),
-                    IwlanHelper.isCrossSimCallingEnabled(mContext, getSlotIndex()))) {
-                nriBuilder
-                        .setRegistrationState(
-                                NetworkRegistrationInfo.REGISTRATION_STATE_NOT_REGISTERED_SEARCHING)
-                        .setAccessNetworkTechnology(TelephonyManager.NETWORK_TYPE_UNKNOWN);
-                Log.d(SUB_TAG, "reg state REGISTRATION_STATE_NOT_REGISTERED_SEARCHING");
-            } else {
-                nriBuilder
-                        .setRegistrationState(NetworkRegistrationInfo.REGISTRATION_STATE_HOME)
-                        .setAccessNetworkTechnology(TelephonyManager.NETWORK_TYPE_IWLAN);
-                Log.d(SUB_TAG, "reg state REGISTRATION_STATE_HOME");
-            }
-
-            callback.onRequestNetworkRegistrationInfoComplete(
-                    NetworkServiceCallback.RESULT_SUCCESS, nriBuilder.build());
+            mIwlanNetworkServiceHandler.sendMessage(
+                    mIwlanNetworkServiceHandler.obtainMessage(
+                            EVENT_NETWORK_REGISTRATION_INFO_REQUEST,
+                            new NetworkRegistrationInfoRequestData(domain, callback, this)));
         }
 
         /**
@@ -254,8 +189,8 @@ public class IwlanNetworkService extends NetworkService {
         @Override
         public void close() {
             mIwlanNetworkService.removeNetworkServiceProvider(this);
-            IwlanEventListener.getInstance(mContext, getSlotIndex()).removeEventListener(mHandler);
-            mHandlerThread.quit();
+            IwlanEventListener.getInstance(mContext, getSlotIndex())
+                    .removeEventListener(mIwlanNetworkServiceHandler);
         }
 
         @VisibleForTesting
@@ -279,6 +214,126 @@ public class IwlanNetworkService extends NetworkService {
         }
     }
 
+    private final class IwlanNetworkServiceHandler extends Handler {
+        private final String TAG = IwlanNetworkServiceHandler.class.getSimpleName();
+
+        @Override
+        public void handleMessage(Message msg) {
+            Log.d(TAG, "msg.what = " + eventToString(msg.what));
+
+            IwlanNetworkServiceProvider iwlanNetworkServiceProvider;
+
+            switch (msg.what) {
+                case IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT:
+                    iwlanNetworkServiceProvider = getNetworkServiceProvider(msg.arg1);
+                    iwlanNetworkServiceProvider.notifyNetworkRegistrationInfoChanged();
+                    break;
+
+                case IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT:
+                    iwlanNetworkServiceProvider = getNetworkServiceProvider(msg.arg1);
+                    iwlanNetworkServiceProvider.notifyNetworkRegistrationInfoChanged();
+                    break;
+
+                case EVENT_NETWORK_REGISTRATION_INFO_REQUEST:
+                    NetworkRegistrationInfoRequestData networkRegistrationInfoRequestData =
+                            (NetworkRegistrationInfoRequestData) msg.obj;
+                    int domain = networkRegistrationInfoRequestData.mDomain;
+                    NetworkServiceCallback callback = networkRegistrationInfoRequestData.mCallback;
+                    iwlanNetworkServiceProvider =
+                            networkRegistrationInfoRequestData.mIwlanNetworkServiceProvider;
+
+                    if (callback == null) {
+                        Log.d(TAG, "Error: callback is null. returning");
+                        return;
+                    }
+                    if (domain != NetworkRegistrationInfo.DOMAIN_PS) {
+                        callback.onRequestNetworkRegistrationInfoComplete(
+                                NetworkServiceCallback.RESULT_ERROR_UNSUPPORTED, null);
+                        return;
+                    }
+
+                    NetworkRegistrationInfo.Builder nriBuilder =
+                            new NetworkRegistrationInfo.Builder();
+                    nriBuilder
+                            .setAvailableServices(
+                                    Arrays.asList(NetworkRegistrationInfo.SERVICE_TYPE_DATA))
+                            .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WLAN)
+                            .setEmergencyOnly(!iwlanNetworkServiceProvider.mIsSubActive)
+                            .setDomain(NetworkRegistrationInfo.DOMAIN_PS);
+
+                    if (!IwlanNetworkService.isNetworkConnected(
+                            IwlanHelper.isDefaultDataSlot(
+                                    mContext, iwlanNetworkServiceProvider.getSlotIndex()),
+                            IwlanHelper.isCrossSimCallingEnabled(
+                                    mContext, iwlanNetworkServiceProvider.getSlotIndex()))) {
+                        nriBuilder
+                                .setRegistrationState(
+                                        NetworkRegistrationInfo
+                                                .REGISTRATION_STATE_NOT_REGISTERED_SEARCHING)
+                                .setAccessNetworkTechnology(TelephonyManager.NETWORK_TYPE_UNKNOWN);
+                        Log.d(TAG, "reg state REGISTRATION_STATE_NOT_REGISTERED_SEARCHING");
+                    } else {
+                        nriBuilder
+                                .setRegistrationState(
+                                        NetworkRegistrationInfo.REGISTRATION_STATE_HOME)
+                                .setAccessNetworkTechnology(TelephonyManager.NETWORK_TYPE_IWLAN);
+                        Log.d(TAG, "reg state REGISTRATION_STATE_HOME");
+                    }
+
+                    callback.onRequestNetworkRegistrationInfoComplete(
+                            NetworkServiceCallback.RESULT_SUCCESS, nriBuilder.build());
+                    break;
+
+                case EVENT_CREATE_NETWORK_SERVICE_PROVIDER:
+                    iwlanNetworkServiceProvider = (IwlanNetworkServiceProvider) msg.obj;
+
+                    if (sIwlanNetworkServiceProviders.isEmpty()) {
+                        initCallback();
+                    }
+
+                    addIwlanNetworkServiceProvider(iwlanNetworkServiceProvider);
+                    break;
+
+                case EVENT_REMOVE_NETWORK_SERVICE_PROVIDER:
+                    iwlanNetworkServiceProvider = (IwlanNetworkServiceProvider) msg.obj;
+                    IwlanNetworkServiceProvider nsp =
+                            sIwlanNetworkServiceProviders.remove(
+                                    iwlanNetworkServiceProvider.getSlotIndex());
+                    if (nsp == null) {
+                        Log.w(
+                                TAG,
+                                "No NetworkServiceProvider exists for slot "
+                                        + iwlanNetworkServiceProvider.getSlotIndex());
+                        return;
+                    }
+                    if (sIwlanNetworkServiceProviders.isEmpty()) {
+                        deinitCallback();
+                    }
+                    break;
+
+                default:
+                    throw new IllegalStateException("Unexpected value: " + msg.what);
+            }
+        }
+
+        IwlanNetworkServiceHandler(Looper looper) {
+            super(looper);
+        }
+    }
+
+    private static final class NetworkRegistrationInfoRequestData {
+        final int mDomain;
+        final NetworkServiceCallback mCallback;
+        final IwlanNetworkServiceProvider mIwlanNetworkServiceProvider;
+
+        private NetworkRegistrationInfoRequestData(
+                int domain, NetworkServiceCallback callback, IwlanNetworkServiceProvider nsp) {
+            mDomain = domain;
+            mCallback = callback;
+            mIwlanNetworkServiceProvider = nsp;
+        }
+    }
+
     /**
      * Create the instance of {@link NetworkServiceProvider}. Network service provider must override
      * this method to facilitate the creation of {@link NetworkServiceProvider} instances. The
@@ -294,32 +349,14 @@ public class IwlanNetworkService extends NetworkService {
 
         // TODO: validity check slot index
 
-        if (sIwlanNetworkServiceProviders.isEmpty()) {
-            // first invocation
-            mNetworkCallbackHandlerThread =
-                    new HandlerThread(IwlanNetworkService.class.getSimpleName());
-            mNetworkCallbackHandlerThread.start();
-            Looper looper = mNetworkCallbackHandlerThread.getLooper();
-            Handler handler = new Handler(looper);
-
-            // register for default network callback
-            ConnectivityManager connectivityManager =
-                    mContext.getSystemService(ConnectivityManager.class);
-            mNetworkMonitorCallback = new IwlanNetworkMonitorCallback();
-            connectivityManager.registerSystemDefaultNetworkCallback(
-                    mNetworkMonitorCallback, handler);
-            Log.d(TAG, "Registered with Connectivity Service");
-
-            /* register with subscription manager */
-            SubscriptionManager subscriptionManager =
-                    mContext.getSystemService(SubscriptionManager.class);
-            mSubsChangeListener = new IwlanOnSubscriptionsChangedListener();
-            subscriptionManager.addOnSubscriptionsChangedListener(mSubsChangeListener);
-            Log.d(TAG, "Registered with Subscription Service");
+        if (mIwlanNetworkServiceHandler == null) {
+            initHandler();
         }
 
         IwlanNetworkServiceProvider np = new IwlanNetworkServiceProvider(slotIndex, this);
-        addIwlanNetworkServiceProvider(np);
+        mIwlanNetworkServiceHandler.sendMessage(
+                mIwlanNetworkServiceHandler.obtainMessage(
+                        EVENT_CREATE_NETWORK_SERVICE_PROVIDER, np));
         return np;
     }
 
@@ -358,26 +395,46 @@ public class IwlanNetworkService extends NetworkService {
     }
 
     public void removeNetworkServiceProvider(IwlanNetworkServiceProvider np) {
-        IwlanNetworkServiceProvider nsp = sIwlanNetworkServiceProviders.remove(np.getSlotIndex());
-        if (nsp == null) {
-            Log.w(TAG, "No NetworkServiceProvider exists for slot " + np.getSlotIndex());
-            return;
-        }
-        if (sIwlanNetworkServiceProviders.isEmpty()) {
-            // deinit network related stuff
-            ConnectivityManager connectivityManager =
-                    mContext.getSystemService(ConnectivityManager.class);
-            connectivityManager.unregisterNetworkCallback(mNetworkMonitorCallback);
-            mNetworkCallbackHandlerThread.quit(); // no need to quitSafely
-            mNetworkCallbackHandlerThread = null;
-            mNetworkMonitorCallback = null;
+        mIwlanNetworkServiceHandler.sendMessage(
+                mIwlanNetworkServiceHandler.obtainMessage(
+                        EVENT_REMOVE_NETWORK_SERVICE_PROVIDER, np));
+    }
 
-            // deinit subscription manager related stuff
-            SubscriptionManager subscriptionManager =
-                    mContext.getSystemService(SubscriptionManager.class);
-            subscriptionManager.removeOnSubscriptionsChangedListener(mSubsChangeListener);
-            mSubsChangeListener = null;
+    void initCallback() {
+        // register for default network callback
+        ConnectivityManager connectivityManager =
+                mContext.getSystemService(ConnectivityManager.class);
+        mNetworkMonitorCallback = new IwlanNetworkMonitorCallback();
+        connectivityManager.registerSystemDefaultNetworkCallback(
+                mNetworkMonitorCallback, mIwlanNetworkServiceHandler);
+        Log.d(TAG, "Registered with Connectivity Service");
+
+        /* register with subscription manager */
+        SubscriptionManager subscriptionManager =
+                mContext.getSystemService(SubscriptionManager.class);
+        mSubsChangeListener = new IwlanOnSubscriptionsChangedListener();
+        subscriptionManager.addOnSubscriptionsChangedListener(
+                new HandlerExecutor(mIwlanNetworkServiceHandler), mSubsChangeListener);
+        Log.d(TAG, "Registered with Subscription Service");
+    }
+
+    void deinitCallback() {
+        // deinit network related stuff
+        ConnectivityManager connectivityManager =
+                mContext.getSystemService(ConnectivityManager.class);
+        connectivityManager.unregisterNetworkCallback(mNetworkMonitorCallback);
+        mNetworkMonitorCallback = null;
+
+        // deinit subscription manager related stuff
+        SubscriptionManager subscriptionManager =
+                mContext.getSystemService(SubscriptionManager.class);
+        subscriptionManager.removeOnSubscriptionsChangedListener(mSubsChangeListener);
+        mSubsChangeListener = null;
+        if (mIwlanNetworkServiceHandlerThread != null) {
+            mIwlanNetworkServiceHandlerThread.quit();
+            mIwlanNetworkServiceHandlerThread = null;
         }
+        mIwlanNetworkServiceHandler = null;
     }
 
     Context getContext() {
@@ -391,12 +448,36 @@ public class IwlanNetworkService extends NetworkService {
 
     @VisibleForTesting
     IwlanNetworkServiceProvider getNetworkServiceProvider(int slotIndex) {
-        for (IwlanNetworkServiceProvider np : sIwlanNetworkServiceProviders.values()) {
-            if (np.getSlotIndex() == slotIndex) {
-                return np;
-            }
+        return sIwlanNetworkServiceProviders.get(slotIndex);
+    }
+
+    @VisibleForTesting
+    void initHandler() {
+        mIwlanNetworkServiceHandler = new IwlanNetworkServiceHandler(getLooper());
+    }
+
+    @VisibleForTesting
+    Looper getLooper() {
+        mIwlanNetworkServiceHandlerThread = new HandlerThread("IwlanNetworkServiceThread");
+        mIwlanNetworkServiceHandlerThread.start();
+        return mIwlanNetworkServiceHandlerThread.getLooper();
+    }
+
+    private static String eventToString(int event) {
+        switch (event) {
+            case IwlanEventListener.CROSS_SIM_CALLING_ENABLE_EVENT:
+                return "CROSS_SIM_CALLING_ENABLE_EVENT";
+            case IwlanEventListener.CROSS_SIM_CALLING_DISABLE_EVENT:
+                return "CROSS_SIM_CALLING_DISABLE_EVENT";
+            case EVENT_NETWORK_REGISTRATION_INFO_REQUEST:
+                return "EVENT_NETWORK_REGISTRATION_INFO_REQUEST";
+            case EVENT_CREATE_NETWORK_SERVICE_PROVIDER:
+                return "EVENT_CREATE_NETWORK_SERVICE_PROVIDER";
+            case EVENT_REMOVE_NETWORK_SERVICE_PROVIDER:
+                return "EVENT_REMOVE_NETWORK_SERVICE_PROVIDER";
+            default:
+                return "Unknown(" + event + ")";
         }
-        return null;
     }
 
     @Override

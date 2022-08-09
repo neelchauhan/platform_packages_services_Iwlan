@@ -85,6 +85,16 @@ public class IwlanEventListener {
     /** On Cellinfo changed */
     public static final int CELLINFO_CHANGED_EVENT = 11;
 
+    /* Events used and handled by IwlanDataService internally */
+    public static final int DATA_SERVICE_INTERNAL_EVENT_BASE = 100;
+
+    public static final int DATA_SERVICE_INTERNAL_EVENT_END = 200;
+
+    /* Events used and handled by IwlanNetworkService internally */
+    public static final int NETWORK_SERVICE_INTERNAL_EVENT_BASE = 200;
+
+    public static final int NETWORK_SERVICE_INTERNAL_EVENT_END = 300;
+
     @IntDef({
         CARRIER_CONFIG_CHANGED_EVENT,
         WIFI_DISABLE_EVENT,
@@ -152,9 +162,14 @@ public class IwlanEventListener {
         }
     }
 
-    /** Returns IwlanEventListener instance */
+    /** c Returns IwlanEventListener instance */
     public static IwlanEventListener getInstance(@NonNull Context context, int slotId) {
         return mInstances.computeIfAbsent(slotId, k -> new IwlanEventListener(context, slotId));
+    }
+
+    @VisibleForTesting
+    public static void resetAllInstances() {
+        mInstances.clear();
     }
 
     /**
