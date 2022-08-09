@@ -625,7 +625,7 @@ public class EpdgTunnelManager {
     }
 
     /**
-     * Gets a epdg tunnel manager instance.
+     * Gets a EpdgTunnelManager instance.
      *
      * @param context application context
      * @param subId subscription ID for the tunnel
@@ -634,6 +634,11 @@ public class EpdgTunnelManager {
     public static EpdgTunnelManager getInstance(@NonNull Context context, int subId) {
         return mTunnelManagerInstances.computeIfAbsent(
                 subId, k -> new EpdgTunnelManager(context, subId));
+    }
+
+    @VisibleForTesting
+    public static void resetAllInstances() {
+        mTunnelManagerInstances.clear();
     }
 
     public interface TunnelCallback {

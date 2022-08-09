@@ -85,6 +85,7 @@ public class ErrorPolicyManagerTest {
         doReturn(mockAssetManager).when(mMockContext).getAssets();
         doReturn(is).when(mockAssetManager).open(any());
         setupMockForCarrierConfig(null);
+        ErrorPolicyManager.resetAllInstances();
         mErrorPolicyManager = spy(ErrorPolicyManager.getInstance(mMockContext, DEFAULT_SLOT_INDEX));
     }
 
