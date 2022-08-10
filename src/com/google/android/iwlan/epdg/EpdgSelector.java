@@ -55,6 +55,8 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.TimeUnit;
 
 public class EpdgSelector {
     private static final String TAG = "EpdgSelector";
@@ -66,6 +68,8 @@ public class EpdgSelector {
     private int mV6PcoId = -1;
     private byte[] mV4PcoData = null;
     private byte[] mV6PcoData = null;
+
+    private static final long DNS_RESOLVER_TIMEOUT_DURATION_SEC = 5L;
 
     final Comparator<InetAddress> inetAddressComparator =
             new Comparator<InetAddress>() {
@@ -180,7 +184,9 @@ public class EpdgSelector {
                         };
                 DnsResolver.getInstance()
                         .query(network, domainName, DnsResolver.FLAG_EMPTY, r -> r.run(), null, cb);
-                ipList = new ArrayList<>(result.get());
+                ipList =
+                        new ArrayList<>(
+                                result.get(DNS_RESOLVER_TIMEOUT_DURATION_SEC, TimeUnit.SECONDS));
             } catch (ExecutionException e) {
                 Log.e(TAG, "Cause of ExecutionException: ", e.getCause());
             } catch (InterruptedException e) {
@@ -188,6 +194,8 @@ public class EpdgSelector {
                     Thread.currentThread().interrupt();
                 }
                 Log.e(TAG, "InterruptedException: ", e);
+            } catch (TimeoutException e) {
+                Log.e(TAG, "TimeoutException: ", e);
             }
         }
 
@@ -804,7 +812,8 @@ public class EpdgSelector {
         NaptrDnsResolver.query(network, domainName.toString(), r -> r.run(), null, naptrDnsCb);
 
         try {
-            final List<NaptrTarget> naptrResponse = naptrDnsResult.get();
+            final List<NaptrTarget> naptrResponse =
+                    naptrDnsResult.get(DNS_RESOLVER_TIMEOUT_DURATION_SEC, TimeUnit.SECONDS);
             // Check if there is any record in the NAPTR response
             if (naptrResponse != null && naptrResponse.size() > 0) {
                 processNaptrResponse(
@@ -824,6 +833,8 @@ public class EpdgSelector {
                 Thread.currentThread().interrupt();
             }
             Log.e(TAG, "InterruptedException: ", e);
+        } catch (TimeoutException e) {
+            Log.e(TAG, "TimeoutException: ", e);
         }
     }
 
