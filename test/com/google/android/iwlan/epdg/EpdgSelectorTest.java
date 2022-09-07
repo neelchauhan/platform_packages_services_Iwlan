@@ -49,6 +49,7 @@ import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 
+import com.google.android.iwlan.ErrorPolicyManager;
 import com.google.android.iwlan.IwlanError;
 
 import org.junit.After;
@@ -89,6 +90,7 @@ public class EpdgSelectorTest {
 
     @Mock private Context mMockContext;
     @Mock private Network mMockNetwork;
+    @Mock private ErrorPolicyManager mMockErrorPolicyManager;
     @Mock private SubscriptionManager mMockSubscriptionManager;
     @Mock private SubscriptionInfo mMockSubscriptionInfo;
     @Mock private CarrierConfigManager mMockCarrierConfigManager;
@@ -111,8 +113,14 @@ public class EpdgSelectorTest {
     @Before
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
-        mStaticMockSession = mockitoSession().mockStatic(DnsResolver.class).startMocking();
+        mStaticMockSession =
+                mockitoSession()
+                        .mockStatic(DnsResolver.class)
+                        .mockStatic(ErrorPolicyManager.class)
+                        .startMocking();
 
+        when(ErrorPolicyManager.getInstance(mMockContext, DEFAULT_SLOT_INDEX))
+                .thenReturn(mMockErrorPolicyManager);
         mEpdgSelector = new EpdgSelector(mMockContext, DEFAULT_SLOT_INDEX);
 
         when(mMockContext.getSystemService(eq(SubscriptionManager.class)))
@@ -308,7 +316,7 @@ public class EpdgSelectorTest {
                 mEpdgSelector.getValidatedServerList(
                         1234,
                         EpdgSelector.PROTO_FILTER_IPV4V6,
-                        false /*isRoaming*/,
+                        false /* isRoaming */,
                         isEmergency,
                         mMockNetwork,
                         new EpdgSelector.EpdgSelectorCallback() {

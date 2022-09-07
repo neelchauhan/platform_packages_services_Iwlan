@@ -173,7 +173,7 @@ public class EpdgTunnelManagerTest {
         setVariable(mEpdgTunnelManager, "mContext", mMockContext);
         mEpdgTunnelManager.initHandler();
         mEpdgTunnelManager.resetTunnelManagerState();
-        when(mEpdgTunnelManager.getEpdgSelector()).thenReturn(mMockEpdgSelector);
+        doReturn(mMockEpdgSelector).when(mEpdgTunnelManager).getEpdgSelector();
         when(mEpdgTunnelManager.getIkeSessionCreator()).thenReturn(mMockIkeSessionCreator);
 
         when(mMockEpdgSelector.getValidatedServerList(

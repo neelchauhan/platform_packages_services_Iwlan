@@ -35,6 +35,7 @@ import android.telephony.CellInfoLte;
 import android.telephony.CellInfoNr;
 import android.telephony.CellInfoTdscdma;
 import android.telephony.CellInfoWcdma;
+import android.telephony.DataFailCause;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
@@ -43,6 +44,7 @@ import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
 
+import com.google.android.iwlan.ErrorPolicyManager;
 import com.google.android.iwlan.IwlanError;
 import com.google.android.iwlan.IwlanHelper;
 import com.google.android.iwlan.epdg.NaptrDnsResolver.NaptrTarget;
@@ -68,6 +70,7 @@ public class EpdgSelector {
     private int mV6PcoId = -1;
     private byte[] mV4PcoData = null;
     private byte[] mV6PcoData = null;
+    @NonNull private ErrorPolicyManager mErrorPolicyManager;
 
     private static final long DNS_RESOLVER_TIMEOUT_DURATION_SEC = 5L;
 
@@ -103,6 +106,8 @@ public class EpdgSelector {
     EpdgSelector(Context context, int slotId) {
         mContext = context;
         mSlotId = slotId;
+
+        mErrorPolicyManager = ErrorPolicyManager.getInstance(mContext, mSlotId);
     }
 
     public static EpdgSelector getSelectorInstance(Context context, int slotId) {
@@ -148,8 +153,8 @@ public class EpdgSelector {
         mV6PcoData = null;
     }
 
-    private void getIP(
-            String domainName, int filter, ArrayList<InetAddress> validIpList, Network network) {
+    private Map.Entry<String, List<InetAddress>> getIP(
+            String domainName, int filter, List<InetAddress> validIpList, Network network) {
         List<InetAddress> ipList = new ArrayList<InetAddress>();
 
         // Get All IP for each domain name
@@ -199,26 +204,30 @@ public class EpdgSelector {
             }
         }
 
+        List<InetAddress> filteredIpList = new ArrayList<>();
         // Filter the IP list by input ProtoFilter
         for (InetAddress ipAddress : ipList) {
             switch (filter) {
                 case PROTO_FILTER_IPV4:
                     if (ipAddress instanceof Inet4Address) {
-                        validIpList.add(ipAddress);
+                        filteredIpList.add(ipAddress);
                     }
                     break;
                 case PROTO_FILTER_IPV6:
                     if (!IwlanHelper.isIpv4EmbeddedIpv6Address(ipAddress)) {
-                        validIpList.add(ipAddress);
+                        filteredIpList.add(ipAddress);
                     }
                     break;
                 case PROTO_FILTER_IPV4V6:
-                    validIpList.add(ipAddress);
+                    filteredIpList.add(ipAddress);
                     break;
                 default:
                     Log.d(TAG, "Invalid ProtoFilter : " + filter);
             }
         }
+        validIpList.addAll(filteredIpList);
+
+        return Map.entry(domainName, filteredIpList);
     }
 
     private String[] getPlmnList() {
@@ -295,7 +304,7 @@ public class EpdgSelector {
         return combinedList.toArray(new String[combinedList.size()]);
     }
 
-    private ArrayList<InetAddress> removeDuplicateIp(ArrayList<InetAddress> validIpList) {
+    private ArrayList<InetAddress> removeDuplicateIp(List<InetAddress> validIpList) {
         ArrayList<InetAddress> resultIpList = new ArrayList<InetAddress>();
 
         for (Iterator<InetAddress> iterator = validIpList.iterator(); iterator.hasNext(); ) {
@@ -329,7 +338,7 @@ public class EpdgSelector {
     }
 
     private void resolutionMethodStatic(
-            int filter, ArrayList<InetAddress> validIpList, boolean isRoaming, Network network) {
+            int filter, List<InetAddress> validIpList, boolean isRoaming, Network network) {
         String[] domainNames = null;
 
         Log.d(TAG, "STATIC Method");
@@ -384,10 +393,11 @@ public class EpdgSelector {
         return inSameCountry;
     }
 
-    private void resolutionMethodPlmn(
-            int filter, ArrayList<InetAddress> validIpList, boolean isEmergency, Network network) {
+    private Map<String, List<InetAddress>> resolutionMethodPlmn(
+            int filter, List<InetAddress> validIpList, boolean isEmergency, Network network) {
         String[] plmnList;
         StringBuilder domainName = new StringBuilder();
+        Map<String, List<InetAddress>> domainNameToIpAddr = new LinkedHashMap<>();
 
         Log.d(TAG, "PLMN Method");
 
@@ -421,13 +431,16 @@ public class EpdgSelector {
                     .append(".mcc")
                     .append(mccmnc[0])
                     .append(".pub.3gppnetwork.org");
-            getIP(domainName.toString(), filter, validIpList, network);
+            Map.Entry<String, List<InetAddress>> entry =
+                    getIP(domainName.toString(), filter, validIpList, network);
+            domainNameToIpAddr.put(entry.getKey(), entry.getValue());
             domainName.setLength(0);
         }
+        return domainNameToIpAddr;
     }
 
     private void resolutionMethodCellularLoc(
-            int filter, ArrayList<InetAddress> validIpList, boolean isEmergency, Network network) {
+            int filter, List<InetAddress> validIpList, boolean isEmergency, Network network) {
         String[] plmnList;
         StringBuilder domainName = new StringBuilder();
 
@@ -549,7 +562,7 @@ public class EpdgSelector {
 
     private void lacDomainNameResolution(
             int filter,
-            ArrayList<InetAddress> validIpList,
+            List<InetAddress> validIpList,
             String lacString,
             boolean isEmergency,
             Network network) {
@@ -583,7 +596,7 @@ public class EpdgSelector {
         }
     }
 
-    private void resolutionMethodPco(int filter, ArrayList<InetAddress> validIpList) {
+    private void resolutionMethodPco(int filter, List<InetAddress> validIpList) {
         Log.d(TAG, "PCO Method");
 
         int PCO_ID_IPV6 =
@@ -621,7 +634,7 @@ public class EpdgSelector {
         }
     }
 
-    private void getInetAddressWithPcoData(byte[] pcoData, ArrayList<InetAddress> validIpList) {
+    private void getInetAddressWithPcoData(byte[] pcoData, List<InetAddress> validIpList) {
         InetAddress ipAddress;
         if (pcoData != null && pcoData.length > 0) {
             try {
@@ -682,7 +695,7 @@ public class EpdgSelector {
 
     private void processNaptrResponse(
             int filter,
-            ArrayList<InetAddress> validIpList,
+            List<InetAddress> validIpList,
             boolean isEmergency,
             Network network,
             boolean isRegisteredWith3GPP,
@@ -734,7 +747,7 @@ public class EpdgSelector {
     }
 
     private void resolutionMethodVisitedCountry(
-            int filter, ArrayList<InetAddress> validIpList, boolean isEmergency, Network network) {
+            int filter, List<InetAddress> validIpList, boolean isEmergency, Network network) {
         StringBuilder domainName = new StringBuilder();
 
         TelephonyManager telephonyManager = mContext.getSystemService(TelephonyManager.class);
@@ -845,13 +858,11 @@ public class EpdgSelector {
             boolean isEmergency,
             @NonNull Network network,
             EpdgSelectorCallback selectorCallback) {
-        ArrayList<InetAddress> validIpList = new ArrayList<InetAddress>();
-        StringBuilder domainName = new StringBuilder();
 
         Runnable doValidation =
                 () -> {
+                    List<InetAddress> validIpList = new ArrayList<>();
                     Log.d(TAG, "Processing request with transactionId: " + transactionId);
-                    String[] plmnList;
 
                     int[] addrResolutionMethods =
                             IwlanHelper.getConfig(
@@ -872,6 +883,7 @@ public class EpdgSelector {
                         resolutionMethodVisitedCountry(filter, validIpList, isEmergency, network);
                     }
 
+                    Map<String, List<InetAddress>> plmnDomainNamesToIpAddress = null;
                     for (int addrResolutionMethod : addrResolutionMethods) {
                         switch (addrResolutionMethod) {
                             case CarrierConfigManager.Iwlan.EPDG_ADDRESS_STATIC:
@@ -879,7 +891,9 @@ public class EpdgSelector {
                                 break;
 
                             case CarrierConfigManager.Iwlan.EPDG_ADDRESS_PLMN:
-                                resolutionMethodPlmn(filter, validIpList, isEmergency, network);
+                                plmnDomainNamesToIpAddress =
+                                        resolutionMethodPlmn(
+                                                filter, validIpList, isEmergency, network);
                                 break;
 
                             case CarrierConfigManager.Iwlan.EPDG_ADDRESS_PCO:
@@ -900,6 +914,23 @@ public class EpdgSelector {
                     }
 
                     if (selectorCallback != null) {
+                        if (mErrorPolicyManager.getMostRecentDataFailCause()
+                                == DataFailCause.IWLAN_CONGESTION) {
+                            int numFqdns = plmnDomainNamesToIpAddress.size();
+                            int index = mErrorPolicyManager.getCurrentFqdnIndex(numFqdns);
+                            if (index >= 0 && index < numFqdns) {
+                                Object[] keys = plmnDomainNamesToIpAddress.keySet().toArray();
+                                validIpList = plmnDomainNamesToIpAddress.get(keys[index]);
+                            } else {
+                                Log.w(
+                                        TAG,
+                                        "CONGESTION error handling- invalid index: "
+                                                + index
+                                                + " number of PLMN FQDNs: "
+                                                + numFqdns);
+                            }
+                        }
+
                         if (!validIpList.isEmpty()) {
                             Collections.sort(validIpList, inetAddressComparator);
                             selectorCallback.onServerListChanged(

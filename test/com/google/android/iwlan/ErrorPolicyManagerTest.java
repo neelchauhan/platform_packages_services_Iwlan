@@ -676,6 +676,84 @@ public class ErrorPolicyManagerTest {
     }
 
     @Test
+    public void testErrorPolicyWithNumAttemptsPerFqdn() throws Exception {
+        String apn = "ims";
+        String config =
+                "[{"
+                        + "\"ApnName\": \""
+                        + apn
+                        + "\","
+                        + "\"ErrorTypes\": [{"
+                        + getErrorTypeInJSON(
+                                "IKE_PROTOCOL_ERROR_TYPE", /* ErrorType */
+                                new String[] {"15500"}, /* ErrorDetails ("CONGESTION") */
+                                "6", /* NumAttemptsPerFqdn */
+                                new String[] {
+                                    "0", "0", "300", "600", "1200", "0", "0", "0", "300", "600",
+                                    "1200", "-1"
+                                }, /* RetryArray */
+                                new String[] {
+                                    "APM_ENABLE_EVENT",
+                                    "WIFI_DISABLE_EVENT",
+                                    "WIFI_CALLING_DISABLE_EVENT"
+                                }) /* UnthrottlingEvents */
+                        + "}]"
+                        + "}]";
+
+        PersistableBundle bundle = new PersistableBundle();
+        bundle.putString(ErrorPolicyManager.KEY_ERROR_POLICY_CONFIG_STRING, config);
+        setupMockForCarrierConfig(bundle);
+        mErrorPolicyManager
+                .mHandler
+                .obtainMessage(IwlanEventListener.CARRIER_CONFIG_CHANGED_EVENT)
+                .sendToTarget();
+
+        sleep(1000);
+
+        // IKE_PROTOCOL_ERROR_TYPE(15500)
+        // UE constructs 2 PLMN FQDNs.
+        IwlanError iwlanError = buildIwlanIkeProtocolError(15500 /* CONGESTION */);
+
+        long time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(0, time);
+        assertEquals(
+                DataFailCause.IWLAN_CONGESTION, mErrorPolicyManager.getMostRecentDataFailCause());
+
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(0, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(300, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(600, time);
+
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(1200, time);
+        assertEquals(0, mErrorPolicyManager.getCurrentFqdnIndex(2));
+
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(0, time);
+        assertEquals(1, mErrorPolicyManager.getCurrentFqdnIndex(2));
+
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(0, time);
+        assertEquals(1, mErrorPolicyManager.getCurrentFqdnIndex(2));
+
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(0, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(300, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(600, time);
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(1200, time);
+
+        // Steady state retry duration, cycles back to 1st FQDN.
+        time = mErrorPolicyManager.reportIwlanError(apn, iwlanError);
+        assertEquals(1200, time);
+        assertEquals(0, mErrorPolicyManager.getCurrentFqdnIndex(2));
+    }
+
+    @Test
     public void testErrorStats() throws Exception {
         String apn1 = "ims";
         String apn2 = "mms";
@@ -727,6 +805,29 @@ public class ErrorPolicyManagerTest {
                 + "\"ErrorDetails\": [\""
                 + String.join("\", \"", errorDetails)
                 + "\"],"
+                + "\"RetryArray\": [\""
+                + String.join("\", \"", retryArray)
+                + "\"],"
+                + "\"UnthrottlingEvents\": [\""
+                + String.join("\", \"", unthrottlingEvents)
+                + "\"]";
+    }
+
+    private String getErrorTypeInJSON(
+            String ErrorType,
+            String[] errorDetails,
+            String numAttemptsPerFqdn,
+            String[] retryArray,
+            String[] unthrottlingEvents) {
+        return "\"ErrorType\": \""
+                + ErrorType
+                + "\","
+                + "\"ErrorDetails\": [\""
+                + String.join("\", \"", errorDetails)
+                + "\"],"
+                + "\"NumAttemptsPerFqdn\": \""
+                + numAttemptsPerFqdn
+                + "\","
                 + "\"RetryArray\": [\""
                 + String.join("\", \"", retryArray)
                 + "\"],"
