@@ -709,6 +709,7 @@ public class ErrorPolicyManagerTest {
                 .sendToTarget();
 
         sleep(1000);
+        assertEquals(DataFailCause.NONE, mErrorPolicyManager.getMostRecentDataFailCause());
 
         // IKE_PROTOCOL_ERROR_TYPE(15500)
         // UE constructs 2 PLMN FQDNs.
