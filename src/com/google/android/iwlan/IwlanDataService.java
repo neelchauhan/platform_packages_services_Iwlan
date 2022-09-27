@@ -209,6 +209,7 @@ public class IwlanDataService extends DataService {
             // ideally it should be 1280 - tunnelling overhead ?
             private static final int LINK_MTU =
                     1280; // TODO: need to substract tunnelling overhead?
+            private static final int LINK_MTU_CST = 1200; // Reserve 80 bytes for VCN.
             static final int TUNNEL_DOWN = 1;
             static final int TUNNEL_IN_BRINGUP = 2;
             static final int TUNNEL_UP = 3;
@@ -235,7 +236,11 @@ public class IwlanDataService extends DataService {
             }
 
             public int getLinkMtu() {
-                return LINK_MTU; // TODO: need to substract tunnelling overhead
+                if ((sDefaultDataTransport == Transport.MOBILE) && sNetworkConnected) {
+                    return LINK_MTU_CST;
+                } else {
+                    return LINK_MTU; // TODO: need to substract tunnelling overhead
+                }
             }
 
             public void setProtocolType(int protocolType) {
