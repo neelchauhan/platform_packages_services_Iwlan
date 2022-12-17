@@ -403,6 +403,9 @@ public class EpdgSelector {
 
         plmnList = getPlmnList();
         for (String plmn : plmnList) {
+            if (!IwlanHelper.getBoolean(CarrierConfigManager.KEY_CARRIER_DEFAULT_WFC_IMS_ENABLED_BOOL)) {
+                continue;
+            }
             String[] mccmnc = splitMccMnc(plmn);
             /*
              * Operator Identifier based ePDG FQDN format:
