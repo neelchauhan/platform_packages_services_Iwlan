@@ -343,6 +343,10 @@ public class EpdgSelector {
 
         Log.d(TAG, "STATIC Method");
 
+        if (!IwlanHelper.getBoolean(CarrierConfigManager.KEY_CARRIER_DEFAULT_WFC_IMS_ENABLED_BOOL)) {
+            return;
+        }
+
         // Get the static domain names from carrier config
         // Config obtained in form of a list of domain names separated by
         // a delimeter is only used for testing purpose.
