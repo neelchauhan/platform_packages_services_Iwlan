@@ -864,7 +864,14 @@ public class EpdgSelector {
                     List<InetAddress> validIpList = new ArrayList<>();
                     Log.d(TAG, "Processing request with transactionId: " + transactionId);
 
+                    /*
+                     * Get an empty array if Wi-Fi calling is disabled
+                     * so we don't resolve DNS.
+                     */
                     int[] addrResolutionMethods =
+                            !IwlanHelper.getBoolean(CarrierConfigManager
+                                    .KEY_CARRIER_DEFAULT_WFC_IMS_ENABLED_BOOL) ?
+                            new int[0] :
                             IwlanHelper.getConfig(
                                     CarrierConfigManager.Iwlan.KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY,
                                     mContext,
